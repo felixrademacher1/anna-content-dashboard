@@ -1,24 +1,18 @@
 const router = require('express').Router();
-const fs = require('fs');
-const { dataPath } = require('../logic/dataFile');
+const { load, save } = require('../logic/storage');
 
 // POST /api/migrate — one-time localStorage import
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { posts = [], checkins = [], ideas = [] } = req.body;
 
-  // Only import if current files are empty (safety guard)
-  let existingPosts = [];
-  try {
-    existingPosts = JSON.parse(fs.readFileSync(dataPath('posts.json'), 'utf8') || '[]');
-  } catch {}
-
+  const existingPosts = await load('posts');
   if (existingPosts.length > 0) {
-    return res.status(409).json({ error: 'Data already exists. Delete data files first if you want to reimport.' });
+    return res.status(409).json({ error: 'Data already exists. Clear data first if you want to reimport.' });
   }
 
-  fs.writeFileSync(dataPath('posts.json'),    JSON.stringify(posts,    null, 2));
-  fs.writeFileSync(dataPath('checkins.json'), JSON.stringify(checkins, null, 2));
-  fs.writeFileSync(dataPath('ideas.json'),    JSON.stringify(ideas,    null, 2));
+  await save('posts', posts);
+  await save('checkins', checkins);
+  await save('ideas', ideas);
 
   res.json({ imported: { posts: posts.length, checkins: checkins.length, ideas: ideas.length } });
 });

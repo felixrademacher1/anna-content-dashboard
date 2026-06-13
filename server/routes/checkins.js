@@ -1,13 +1,9 @@
 const router = require('express').Router();
-const fs = require('fs');
 const { computeHealthScores } = require('../logic/health');
-const { dataPath } = require('../logic/dataFile');
+const { load, save } = require('../logic/storage');
 
-const load = () => { try { return JSON.parse(fs.readFileSync(dataPath('checkins.json'), 'utf8')); } catch { return []; } };
-const save = (d) => fs.writeFileSync(dataPath('checkins.json'), JSON.stringify(d, null, 2));
 const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
-// Helper: compute weekStart (Monday) for a given date string
 function getMon(dateStr) {
   const d = new Date(dateStr + 'T12:00:00');
   const day = d.getDay();
@@ -22,21 +18,20 @@ function getSun(monStr) {
 }
 
 // GET /api/checkins
-router.get('/', (req, res) => {
-  const checkins = load();
+router.get('/', async (req, res) => {
+  const checkins = await load('checkins');
   res.json([...checkins].sort((a, b) => b.weekStart.localeCompare(a.weekStart)));
 });
 
 // POST /api/checkins — upserts current week
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { followers, drehtage = [] } = req.body;
   if (!followers) return res.status(400).json({ error: 'followers required' });
 
-  const checkins = load();
+  const checkins = await load('checkins');
   const weekStart = getMon(new Date().toISOString().split('T')[0]);
   const weekEnd = getSun(weekStart);
 
-  // Find previous week's entry for delta calculation
   const prev = [...checkins]
     .filter(c => c.weekStart !== weekStart)
     .sort((a, b) => b.weekStart.localeCompare(a.weekStart))[0];
@@ -55,7 +50,6 @@ router.post('/', (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
-  // Upsert: replace if same weekStart exists
   const existingIdx = checkins.findIndex(c => c.weekStart === weekStart);
   if (existingIdx >= 0) {
     entry.id = checkins[existingIdx].id;
@@ -64,17 +58,17 @@ router.post('/', (req, res) => {
     checkins.unshift(entry);
   }
 
-  save(checkins);
+  await save('checkins', checkins);
   res.status(201).json(entry);
 });
 
 // DELETE /api/checkins/:id
-router.delete('/:id', (req, res) => {
-  const checkins = load();
+router.delete('/:id', async (req, res) => {
+  const checkins = await load('checkins');
   const idx = checkins.findIndex(c => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
   checkins.splice(idx, 1);
-  save(checkins);
+  await save('checkins', checkins);
   res.json({ ok: true });
 });
 
