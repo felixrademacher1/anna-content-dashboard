@@ -1,22 +1,8 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const router = require('express').Router();
 const { computeHealthScores } = require('../logic/health');
+const { load, save } = require('../logic/storage');
 
-const router = express.Router();
-const FILE = path.join(__dirname, '../data/checkins.json');
-
-function load() {
-  return JSON.parse(fs.readFileSync(FILE, 'utf8'));
-}
-
-function save(arr) {
-  fs.writeFileSync(FILE, JSON.stringify(arr, null, 2));
-}
-
-function uid() {
-  return Math.random().toString(36).slice(2) + Date.now();
-}
+const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
 function getMon(today) {
   const d = new Date(today);
@@ -28,14 +14,14 @@ function getMon(today) {
 }
 
 // GET /api/checkins
-router.get('/', (req, res) => {
-  const checkins = load().sort((a, b) => b.weekStart.localeCompare(a.weekStart));
-  res.json(checkins);
+router.get('/', async (req, res) => {
+  const checkins = await load('checkins');
+  res.json(checkins.sort((a, b) => b.weekStart.localeCompare(a.weekStart)));
 });
 
 // POST /api/checkins
-router.post('/', (req, res) => {
-  const checkins = load();
+router.post('/', async (req, res) => {
+  const checkins = await load('checkins');
   const { followers, drehtage = [] } = req.body;
 
   const weekStart = getMon(new Date());
@@ -46,38 +32,29 @@ router.post('/', (req, res) => {
   const others = checkins.filter(c => c.weekStart !== weekStart).sort((a, b) => b.weekStart.localeCompare(a.weekStart));
   const prev = others[0] || null;
   const followerDelta = prev ? (Number(followers) || 0) - (prev.followers || 0) : 0;
-
   const health = computeHealthScores(drehtage);
 
   const existingIdx = checkins.findIndex(c => c.weekStart === weekStart);
   const entry = {
     id: existingIdx >= 0 ? checkins[existingIdx].id : uid(),
-    weekStart,
-    weekEnd,
+    weekStart, weekEnd,
     followers: Number(followers) || 0,
-    followerDelta,
-    drehtage,
-    ...health,
+    followerDelta, drehtage, ...health,
     createdAt: existingIdx >= 0 ? checkins[existingIdx].createdAt : new Date().toISOString(),
   };
 
-  if (existingIdx >= 0) {
-    checkins[existingIdx] = entry;
-  } else {
-    checkins.unshift(entry);
-  }
-
-  save(checkins);
+  if (existingIdx >= 0) { checkins[existingIdx] = entry; } else { checkins.unshift(entry); }
+  await save('checkins', checkins);
   res.status(201).json(entry);
 });
 
 // DELETE /api/checkins/:id
-router.delete('/:id', (req, res) => {
-  const checkins = load();
+router.delete('/:id', async (req, res) => {
+  const checkins = await load('checkins');
   const idx = checkins.findIndex(c => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
   checkins.splice(idx, 1);
-  save(checkins);
+  await save('checkins', checkins);
   res.json({ ok: true });
 });
 

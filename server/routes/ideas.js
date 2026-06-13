@@ -1,65 +1,39 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const router = require('express').Router();
+const { load, save } = require('../logic/storage');
 
-const router = express.Router();
-const FILE = path.join(__dirname, '../data/ideas.json');
+const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
-function load() {
-  return JSON.parse(fs.readFileSync(FILE, 'utf8'));
-}
+router.get('/', async (req, res) => res.json(await load('ideas')));
 
-function save(arr) {
-  fs.writeFileSync(FILE, JSON.stringify(arr, null, 2));
-}
-
-function uid() {
-  return Math.random().toString(36).slice(2) + Date.now();
-}
-
-// GET /api/ideas
-router.get('/', (req, res) => {
-  res.json(load());
-});
-
-// GET /api/ideas/:id
-router.get('/:id', (req, res) => {
-  const idea = load().find(i => i.id === req.params.id);
+router.get('/:id', async (req, res) => {
+  const idea = (await load('ideas')).find(i => i.id === req.params.id);
   if (!idea) return res.status(404).json({ error: 'Not found' });
   res.json(idea);
 });
 
-// POST /api/ideas
-router.post('/', (req, res) => {
-  const ideas = load();
-  const idea = {
-    status: 'Idee',
-    ...req.body,
-    id: uid(),
-    createdAt: new Date().toISOString(),
-  };
+router.post('/', async (req, res) => {
+  const ideas = await load('ideas');
+  const idea = { status: 'Idee', ...req.body, id: uid(), createdAt: new Date().toISOString() };
   ideas.unshift(idea);
-  save(ideas);
+  await save('ideas', ideas);
   res.status(201).json(idea);
 });
 
-// PUT /api/ideas/:id
-router.put('/:id', (req, res) => {
-  const ideas = load();
+router.put('/:id', async (req, res) => {
+  const ideas = await load('ideas');
   const idx = ideas.findIndex(i => i.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
   ideas[idx] = { ...ideas[idx], ...req.body };
-  save(ideas);
+  await save('ideas', ideas);
   res.json(ideas[idx]);
 });
 
-// DELETE /api/ideas/:id
-router.delete('/:id', (req, res) => {
-  const ideas = load();
+router.delete('/:id', async (req, res) => {
+  const ideas = await load('ideas');
   const idx = ideas.findIndex(i => i.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
   ideas.splice(idx, 1);
-  save(ideas);
+  await save('ideas', ideas);
   res.json({ ok: true });
 });
 
