@@ -1,11 +1,10 @@
 const router = require('express').Router();
 const fs = require('fs');
-const path = require('path');
 const { computeHealthScores } = require('../logic/health');
+const { dataPath } = require('../logic/dataFile');
 
-const FILE = path.join(__dirname, '../data/checkins.json');
-const load = () => { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return []; } };
-const save = (d) => fs.writeFileSync(FILE, JSON.stringify(d, null, 2));
+const load = () => { try { return JSON.parse(fs.readFileSync(dataPath('checkins.json'), 'utf8')); } catch { return []; } };
+const save = (d) => fs.writeFileSync(dataPath('checkins.json'), JSON.stringify(d, null, 2));
 const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
 // Helper: compute weekStart (Monday) for a given date string

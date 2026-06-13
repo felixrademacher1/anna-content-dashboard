@@ -1,10 +1,9 @@
 const router = require('express').Router();
 const fs = require('fs');
-const path = require('path');
+const { dataPath } = require('../logic/dataFile');
 
-const FILE = path.join(__dirname, '../data/ideas.json');
-const load = () => { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return []; } };
-const save = (d) => fs.writeFileSync(FILE, JSON.stringify(d, null, 2));
+const load = () => { try { return JSON.parse(fs.readFileSync(dataPath('ideas.json'), 'utf8')); } catch { return []; } };
+const save = (d) => fs.writeFileSync(dataPath('ideas.json'), JSON.stringify(d, null, 2));
 const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
 // GET /api/ideas

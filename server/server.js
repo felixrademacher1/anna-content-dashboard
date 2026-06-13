@@ -16,5 +16,9 @@ app.use('/api/migrate',    require('./routes/migrate'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`anna.exe server running on http://localhost:${PORT}`));
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => console.log(`anna.exe server running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
