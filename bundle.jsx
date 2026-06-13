@@ -1,5 +1,5 @@
 
-const API = 'http://localhost:3001';
+const API = '';
 
 /* ===== charts.jsx ===== */
 /* ============================================================
@@ -1100,29 +1100,33 @@ function AddPostDrawer({ open, onClose, onSave }) {
 
   const handleFile = (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => setShot(e.target.result);
-    reader.readAsDataURL(file);
     setParsing(true); setParsed(false);
-    const fd = new FormData();
-    fd.append('image', file);
-    fetch(`${API}/api/screenshot`, { method: 'POST', body: fd })
-      .then(r => r.json())
-      .then(data => {
-        setF(s => ({
-          ...s,
-          views: data.views ?? s.views,
-          likes: data.likes ?? s.likes,
-          comments: data.comments ?? s.comments,
-          saves: data.saves ?? s.saves,
-          shares: data.shares ?? s.shares,
-          hookRate: data.hookRate ?? s.hookRate,
-          completionRate: data.completionRate ?? s.completionRate,
-          newFollowers: data.newFollowers ?? s.newFollowers,
-        }));
-        setParsing(false); setParsed(true);
+    const reader = new FileReader();
+    reader.onload = e => {
+      setShot(e.target.result);
+      fetch(`${API}/api/screenshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: e.target.result }),
       })
-      .catch(() => { setParsing(false); setParsed(false); });
+        .then(r => r.json())
+        .then(data => {
+          setF(s => ({
+            ...s,
+            views: data.views ?? s.views,
+            likes: data.likes ?? s.likes,
+            comments: data.comments ?? s.comments,
+            saves: data.saves ?? s.saves,
+            shares: data.shares ?? s.shares,
+            hookRate: data.hookRate ?? s.hookRate,
+            completionRate: data.completionRate ?? s.completionRate,
+            newFollowers: data.newFollowers ?? s.newFollowers,
+          }));
+          setParsing(false); setParsed(true);
+        })
+        .catch(() => { setParsing(false); setParsed(false); });
+    };
+    reader.readAsDataURL(file);
   };
   const onDrop = e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
 
