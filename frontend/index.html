@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>anna.exe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.10/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg:      '#0A0A0F', surface: '#131318', elevated: '#1C1C24',
+            border:  '#2A2A38', muted:   '#6B7280', text:     '#F0F0F5',
+            coral:   '#FF6B6B', cyan:    '#4ECDC4', yellow:   '#FFD93D',
+            violet:  '#A78BFA', sage:    '#6EE7B7', rose:     '#F472B6',
+          },
+          fontFamily: { serif: ['"DM Serif Display"','serif'], sans: ['Inter','sans-serif'] },
+        },
+      },
+    };
+  </script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    body{background:#0A0A0F;font-family:'Inter',sans-serif;margin:0}
+    @keyframes lp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+    .lp{animation:lp 2s ease-in-out infinite}
+    @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .slide-up{animation:slideUp .2s ease-out}
+    ::-webkit-scrollbar{width:4px;height:4px}
+    ::-webkit-scrollbar-track{background:#0A0A0F}
+    ::-webkit-scrollbar-thumb{background:#2A2A38;border-radius:2px}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]{-moz-appearance:textfield}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.5);cursor:pointer}
+    input[type=time]::-webkit-calendar-picker-indicator{filter:invert(.5);cursor:pointer}
+    select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+    nav div::-webkit-scrollbar{display:none}
+    @media(max-width:640px){.drehtag-grid{flex-direction:column}}
+    .grad-coral{background:linear-gradient(135deg,rgba(255,107,107,.15),rgba(255,107,107,.04))}
+    .grad-cyan{background:linear-gradient(135deg,rgba(78,205,196,.15),rgba(78,205,196,.04))}
+    .grad-yellow{background:linear-gradient(135deg,rgba(255,217,61,.15),rgba(255,217,61,.04))}
+    .grad-violet{background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(167,139,250,.04))}
+    .grad-sage{background:linear-gradient(135deg,rgba(110,231,183,.15),rgba(110,231,183,.04))}
+  </style>
+</head>
+<body class="bg-bg min-h-screen text-text">
+<div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#6B7280;font-size:14px">Lädt...</div></div>
+
+<!-- API layer — plain JS, loaded before Babel/React -->
+<script src="lib/api.js"></script>
+
+<script type="text/babel">
+const {useState,useCallback,useMemo,useRef,useEffect} = React;
+
+// ─── FARBEN (für inline styles) ──────────────────────────────────────────────
+const C = {
+  coral:'#FF6B6B', cyan:'#4ECDC4', yellow:'#FFD93D',
+  violet:'#A78BFA', sage:'#6EE7B7', rose:'#F472B6',
+  muted:'#6B7280', text:'#F0F0F5', gold:'#FFD93D',
+};
+const CA = (hex,a) => {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+};
+
+// ─── KPIS (frontend copy for display/color logic only — backend does the math) ─
+const KPIS = {
+  amplification:{label:'Amplification',unit:'%',color:'cyan',
+    desc:'(Shares+Saves)/Views — Viralitäts-Signal',
+    good:2,ok:0.5},
+  hookRate:{label:'Hook Rate',unit:'%',color:'coral',
+    desc:'3s-Retention — hält der Einstieg?',
+    good:70,ok:50},
+  completion:{label:'Completion',unit:'%',color:'sage',
+    desc:'Bis zum Ende — kommt der Joke an?',
+    good:50,ok:30},
+  followerCVR:{label:'Follower CVR',unit:'%',color:'yellow',
+    desc:'New Followers/Views — Brand-Building',
+    good:1,ok:0.3},
+  saveRate:{label:'Save Rate',unit:'/1k',color:'violet',
+    desc:'Saves/1000 Views — Content-Tiefe',
+    good:5,ok:2},
+};
+
+const kpiColor = (key,val) => {
+  if(val===null||val===undefined) return C.muted;
+  const k=KPIS[key]; const v=Number(val);
+  if(v>=k.good) return C[k.color];
+  if(v>=k.ok)   return C.yellow;
+  return C.coral;
+};
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const APP_TITLE = 'anna.exe';
+const FORMAT_OPTIONS   = ['Reel','Carousel','Story','Static'];
+const HOOK_OPTIONS     = ['Statement','Frage','Szene','Text-only'];
+const DURATION_OPTIONS = ['unter 15s','15–30s','30–60s','über 60s'];
+const STATUS_OPTIONS   = ['Idee','In Produktion','Live'];
+const TIME_FILTERS     = [
+  {label:'Diese Woche',days:7},{label:'2 Wochen',days:14},
+  {label:'4 Wochen',days:28},{label:'Gesamt',days:null},
+];
+const SORT_OPTIONS = [
+  {label:'Amplification',key:'amplification'},
+  {label:'Hook Rate',    key:'hookRate'},
+  {label:'Completion',   key:'completion'},
+  {label:'Views',        key:'views'},
+  {label:'Datum',        key:'date'},
+  {label:'Save Rate',    key:'saveRate'},
+];
+const QUOTES = [
+  'Alles beginnt mit einer Idee.',
+  'Komik ist Tragödie plus Timing.',
+  'Fünf Sekunden Hook. Der Rest ist Vertrauen.',
+  'Der beste Post ist der, den du noch nicht gemacht hast.',
+  'Die Algorithmen verstehen uns nicht. Das ist in Ordnung.',
+  'Setup → Punchline → Repeat.',
+];
+const FORMAT_COLORS = {
+  Reel:{c:C.rose,bg:CA(C.rose,.1),b:CA(C.rose,.3)},
+  Carousel:{c:C.cyan,bg:CA(C.cyan,.1),b:CA(C.cyan,.3)},
+  Story:{c:C.violet,bg:CA(C.violet,.1),b:CA(C.violet,.3)},
+  Static:{c:C.muted,bg:CA(C.muted,.1),b:CA(C.muted,.3)},
+};
+const STATUS_COLORS = {
+  'Idee':{c:C.violet,bg:CA(C.violet,.1),b:CA(C.violet,.3)},
+  'In Produktion':{c:C.yellow,bg:CA(C.yellow,.1),b:CA(C.yellow,.3)},
+  'Live':{c:C.sage,bg:CA(C.sage,.1),b:CA(C.sage,.3)},
+};
+
+// ─── DATE HELPERS ─────────────────────────────────────────────────────────────
+const toISO  = (d)=>d.toISOString().split('T')[0];
+const nowHM  = ()=>{const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
+const getMon = (d=new Date())=>{const x=new Date(d);const day=x.getDay();x.setDate(x.getDate()-day+(day===0?-6:1));return toISO(x)};
+const getSun = (m)=>{const d=new Date(m+'T12:00:00');d.setDate(d.getDate()+6);return toISO(d)};
+const fmt = (s)=>s?new Date(s+'T12:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
+const fmtW = (m)=>`${fmt(m)} – ${fmt(getSun(m))}`;
+const todayISO = ()=>toISO(new Date());
+
+// ─── UI PRIMITIVES ───────────────────────────────────────────────────────────
+const Card = ({children,className='',accent,onClick})=>(
+  <div onClick={onClick} className={`rounded-2xl bg-surface border border-border/60 p-5 transition-colors duration-150 ${onClick?'cursor-pointer hover:bg-elevated':''} ${className}`}
+    style={accent?{borderColor:CA(C[accent],.3),boxShadow:`0 0 0 1px ${CA(C[accent],.1)}`}:{}}>
+    {children}
+  </div>
+);
+
+const SecTitle = ({children,icon,accent='yellow'})=>(
+  <h2 className="text-xs font-semibold uppercase tracking-widest text-muted mb-4 flex items-center gap-2">
+    {icon&&<span style={{color:C[accent]}}>{icon}</span>}
+    {children}
+  </h2>
+);
+
+const IC = 'w-full rounded-xl bg-elevated border border-border text-text placeholder:text-muted/50 px-3 py-2 text-sm focus:outline-none transition-colors duration-150';
+const Inp = ({label,type='text',value,onChange,placeholder,min,max,step,className=''})=>(
+  <div className={className}>
+    {label&&<label className="block text-xs text-muted mb-1 uppercase tracking-wider">{label}</label>}
+    <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      min={min} max={max} step={step}
+      className={IC} />
+  </div>
+);
+const Sel = ({label,value,onChange,options,className=''})=>(
+  <div className={className}>
+    {label&&<label className="block text-xs text-muted mb-1 uppercase tracking-wider">{label}</label>}
+    <select value={value} onChange={e=>onChange(e.target.value)} className={IC+' appearance-none pr-8'}>
+      {options.map(o=><option key={o} value={o} className="bg-elevated">{o}</option>)}
+    </select>
+  </div>
+);
+const Btn = ({children,onClick,variant='primary',small=false,disabled=false,className=''})=>{
+  const base='rounded-xl font-semibold transition-all duration-150 disabled:opacity-40';
+  const sz=small?'px-3 py-1 text-xs':'px-4 py-2 text-sm';
+  const styles={
+    primary:{background:C.yellow,color:'#0A0A0F'},
+    ghost:{background:'transparent',color:C.muted,border:`1px solid #2A2A38`},
+    danger:{background:'transparent',color:C.coral,border:`1px solid ${CA(C.coral,.3)}`},
+    coral:{background:CA(C.coral,.15),color:C.coral,border:`1px solid ${CA(C.coral,.3)}`},
+    cyan:{background:CA(C.cyan,.15),color:C.cyan,border:`1px solid ${CA(C.cyan,.3)}`},
+  };
+  return <button onClick={onClick} disabled={disabled}
+    className={`${base} ${sz} ${className}`} style={styles[variant]||styles.primary}>{children}</button>;
+};
+
+const Chip = ({label,active,onClick})=>(
+  <button onClick={onClick} className="rounded-full text-xs px-3 py-1 font-medium tracking-wide border transition-all duration-150 whitespace-nowrap"
+    style={active?{background:C.yellow,color:'#0A0A0F',borderColor:C.yellow}:{background:'#131318',color:C.muted,borderColor:'#2A2A38'}}>
+    {label}
+  </button>
+);
+
+const FmtBadge = ({format})=>{
+  const fc=FORMAT_COLORS[format]||{c:C.muted,bg:CA(C.muted,.1),b:CA(C.muted,.3)};
+  return <span className="rounded-full text-xs px-2.5 py-0.5 font-medium border"
+    style={{color:fc.c,background:fc.bg,borderColor:fc.b}}>{format}</span>;
+};
+
+const StatusBadge = ({status})=>{
+  const sc=STATUS_COLORS[status]||STATUS_COLORS['Idee'];
+  return <span className="inline-flex items-center gap-1.5 rounded-full text-xs px-2.5 py-0.5 border font-medium"
+    style={{color:sc.c,background:sc.bg,borderColor:sc.b}}>
+    {status==='Live'&&<span className="w-1.5 h-1.5 rounded-full lp" style={{background:C.sage}}/>}
+    {status}
+  </span>;
+};
+
+const KpiChip = ({kpiKey,value})=>{
+  if(value===null||value===undefined) return null;
+  const k=KPIS[kpiKey]; const col=kpiColor(kpiKey,value);
+  return <span className="rounded-full text-xs px-2 py-0.5 font-semibold border"
+    style={{color:col,background:CA(col,.1),borderColor:CA(col,.25)}}>
+    {k.label} {value}{k.unit}
+  </span>;
+};
+
+const ScoreInput = ({value,onChange,lowGood=false})=>(
+  <div className="flex gap-1 flex-wrap" style={{maxWidth:'100%'}}>
+    {Array.from({length:10},(_,i)=>i+1).map(n=>{
+      const active=value===n;
+      const col=lowGood?(n<=3?C.sage:n<=6?C.yellow:C.coral):(n<=3?C.coral:n<=6?C.yellow:C.sage);
+      return <button key={n} onClick={()=>onChange(n===value?0:n)}
+        className="font-bold transition-all duration-100 shrink-0"
+        style={{width:'clamp(24px,9vw,28px)',height:'clamp(24px,9vw,28px)',borderRadius:6,fontSize:'clamp(10px,2.5vw,12px)',
+          background:active?CA(col,.25):'rgba(255,255,255,0.04)',
+          color:active?col:C.muted,
+          border:`1px solid ${active?CA(col,.4):'#2A2A38'}`}}>
+        {n}
+      </button>;
+    })}
+  </div>
+);
+
+const EmptyState = ({text})=>(
+  <p className="text-center py-10 text-sm italic" style={{color:CA(C.muted,.5)}}>{text}</p>
+);
+
+// ─── SVG CHARTS ──────────────────────────────────────────────────────────────
+const LineChart = ({data,valueKey='val',labelKey='name',color=C.yellow,height=160})=>{
+  const [hov,setHov]=useState(null);
+  if(!data||data.length<2) return <EmptyState text="Mindestens 2 Einträge für die Kurve."/>;
+  const W=600,H=height+20;
+  const PAD={t:12,r:16,b:32,l:56};
+  const cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b;
+  const vals=data.map(d=>d[valueKey]);
+  const minV=Math.min(...vals), maxV=Math.max(...vals), range=maxV-minV||1;
+  const xOf=i=>PAD.l+(i/(data.length-1))*cW;
+  const yOf=v=>PAD.t+cH-((v-minV)/range)*cH;
+  const pathD=data.map((d,i)=>`${i===0?'M':'L'}${xOf(i).toFixed(1)},${yOf(d[valueKey]).toFixed(1)}`).join(' ');
+  const areaD=pathD+` L${xOf(data.length-1).toFixed(1)},${(PAD.t+cH).toFixed(1)} L${xOf(0).toFixed(1)},${(PAD.t+cH).toFixed(1)} Z`;
+  const xLabels=data.length<=6?data.map((_,i)=>i):[0,Math.floor(data.length/2),data.length-1];
+  const yTicks=[0,.5,1].map(t=>({y:PAD.t+cH*(1-t),val:minV+range*t}));
+  const fv=v=>v>=10000?`${(v/1000).toFixed(0)}k`:v>=1000?`${(v/1000).toFixed(1)}k`:Math.round(v);
+  const gid=`grad_${valueKey}`;
+  return (
+    <div style={{position:'relative',width:'100%'}}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}} onMouseLeave={()=>setHov(null)}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0.01"/>
+          </linearGradient>
+        </defs>
+        {yTicks.map((t,i)=><line key={i} x1={PAD.l} x2={PAD.l+cW} y1={t.y} y2={t.y} stroke="#2A2A38" strokeDasharray="4 3"/>)}
+        <path d={areaD} fill={`url(#${gid})`}/>
+        <path d={pathD} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+        {hov!==null&&<line x1={xOf(hov)} x2={xOf(hov)} y1={PAD.t} y2={PAD.t+cH} stroke={color} strokeWidth="1" strokeDasharray="4 3" opacity=".6"/>}
+        {data.map((d,i)=>(
+          <g key={i}>
+            <circle cx={xOf(i)} cy={yOf(d[valueKey])} r={hov===i?6:4} fill={hov===i?C.coral:color} style={{transition:'r .1s,fill .1s'}}/>
+            <circle cx={xOf(i)} cy={yOf(d[valueKey])} r="16" fill="transparent" onMouseEnter={()=>setHov(i)} style={{cursor:'crosshair'}}/>
+          </g>
+        ))}
+        {yTicks.map((t,i)=><text key={i} x={PAD.l-8} y={t.y+4} textAnchor="end" fill={C.muted} fontSize="11">{fv(t.val)}</text>)}
+        {xLabels.map(i=><text key={i} x={xOf(i)} y={H-4} textAnchor="middle" fill={C.muted} fontSize="10">{data[i][labelKey]}</text>)}
+      </svg>
+      {hov!==null&&(
+        <div style={{position:'absolute',left:`calc(${(xOf(hov)/W)*100}% + 8px)`,top:`${(yOf(data[hov][valueKey])/H)*100}%`,transform:'translateY(-50%)',
+          background:'#131318',border:'1px solid #2A2A38',borderRadius:10,padding:'6px 10px',fontSize:12,color:C.text,
+          pointerEvents:'none',whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.5)',zIndex:10}}>
+          <span style={{color:C.muted,marginRight:6}}>{data[hov][labelKey]}</span>
+          <strong style={{color}}>{data[hov][valueKey].toLocaleString('de-DE')}</strong>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BarChart = ({data,valueKey='val',labelKey='name',colorFn,height=100})=>{
+  if(!data||!data.length) return <EmptyState text="Noch keine Daten."/>;
+  const d=data.slice(-10);
+  const max=Math.max(...d.map(x=>x[valueKey]||0))||1;
+  return (
+    <div className="flex items-end justify-around gap-1" style={{height,paddingBottom:20,paddingTop:8}}>
+      {d.map((item,i)=>{
+        const v=item[valueKey]||0;
+        const pct=(v/max)*100;
+        const col=colorFn?colorFn(v):C.cyan;
+        return (
+          <div key={i} className="flex flex-col items-center gap-1 flex-1 h-full justify-end" title={`${item[labelKey]}: ${v}`}>
+            {v>0&&<span className="text-xs font-bold" style={{color:col}}>{v}</span>}
+            <div className="rounded-t-md w-full transition-all duration-300" style={{height:`${pct}%`,minHeight:v>0?4:0,background:CA(col,.7)}}/>
+            <span className="text-center leading-none" style={{fontSize:9,color:C.muted,maxWidth:32,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',width:'100%'}}>{item[labelKey]}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── HEADER ──────────────────────────────────────────────────────────────────
+const Header = ({timeFilter,setTimeFilter})=>{
+  const quote=useMemo(()=>QUOTES[Math.floor(Date.now()/86400000)%QUOTES.length],[]);
+  return (
+    <header className="sticky top-0 z-20 border-b border-border/60" style={{background:'rgba(10,10,15,.92)',backdropFilter:'blur(12px)'}}>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+        <div>
+          <h1 className="font-serif text-2xl tracking-wide leading-none" style={{color:C.yellow}}>{APP_TITLE}</h1>
+          <p className="text-xs mt-0.5 italic" style={{color:CA(C.muted,.6)}}>✦ {quote}</p>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {TIME_FILTERS.map(f=><Chip key={f.label} label={f.label} active={timeFilter===f.days} onClick={()=>setTimeFilter(f.days)}/>)}
+        </div>
+      </div>
+    </header>
+  );
+};
+
+// ─── TAB NAV ─────────────────────────────────────────────────────────────────
+const TABS=[{id:'overview',label:'⟡ Übersicht'},{id:'posts',label:'✦ Posts'},{id:'ideas',label:'★ Ideen'},{id:'checkin',label:'◈ Check-in'}];
+const TabNav = ({active,setActive})=>(
+  <nav className="border-b border-border/60 sticky z-10" style={{top:'var(--header-h,57px)',background:'#0A0A0F'}}>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto" style={{scrollbarWidth:'none'}}>
+      {TABS.map(t=>(
+        <button key={t.id} onClick={()=>setActive(t.id)}
+          className="py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors duration-150"
+          style={active===t.id?{borderColor:C.yellow,color:C.yellow}:{borderColor:'transparent',color:C.muted}}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  </nav>
+);
+
+// ─── CHECK-IN TAB ─────────────────────────────────────────────────────────────
+const emptyDT = (n) => ({datum:'',energie:0,erschoepfung:0,zeitaufwandMin:'',vibeNote:'',label:`Drehtag ${n}`});
+const emptyCI = () => ({followers:'',drehtage:[emptyDT(1),emptyDT(2),emptyDT(3)]});
+
+const DrehtagePanel = ({drehtag,idx,onChange})=>{
+  const set = k => v => onChange({...drehtag,[k]:v});
+  const colE = drehtag.energie>=7?C.sage:drehtag.energie>=4?C.yellow:drehtag.energie>0?C.coral:C.muted;
+  const colEx = drehtag.erschoepfung>=7?C.coral:drehtag.erschoepfung>=4?C.yellow:drehtag.erschoepfung>0?C.sage:C.muted;
+  const hasData = drehtag.energie>0||drehtag.erschoepfung>0||drehtag.zeitaufwandMin||drehtag.vibeNote;
+  return (
+    <div className="rounded-xl p-4 flex-1" style={{
+      border:`1px solid ${hasData?CA(C.coral,.25):'#2A2A38'}`,
+      background:hasData?CA(C.coral,.04):'rgba(255,255,255,.02)',
+      minWidth:0,
+    }}>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-bold uppercase tracking-widest" style={{color:hasData?C.coral:C.muted}}>
+          {drehtag.label}
+        </span>
+        {hasData&&drehtag.energie>0&&(
+          <span className="text-xs font-bold ml-auto" style={{color:colE}}>⚡{drehtag.energie}</span>
+        )}
+        {hasData&&drehtag.erschoepfung>0&&(
+          <span className="text-xs font-bold" style={{color:colEx}}>🩺{drehtag.erschoepfung}</span>
+        )}
+      </div>
+      <div className="space-y-3">
+        <Inp label="Datum" type="date" value={drehtag.datum} onChange={set('datum')}/>
+        <div>
+          <label className="block text-xs uppercase tracking-wider mb-1.5" style={{color:C.muted}}>
+            Energie&nbsp;<span style={{color:C.sage}}>▲ besser</span>
+          </label>
+          <ScoreInput value={drehtag.energie} onChange={set('energie')} lowGood={false}/>
+        </div>
+        <div>
+          <label className="block text-xs uppercase tracking-wider mb-1.5" style={{color:C.muted}}>
+            Erschöpfung&nbsp;<span style={{color:C.coral}}>▲ schlechter</span>
+          </label>
+          <ScoreInput value={drehtag.erschoepfung} onChange={set('erschoepfung')} lowGood={true}/>
+        </div>
+        <Inp label="Zeit (min)" type="number" value={drehtag.zeitaufwandMin} onChange={set('zeitaufwandMin')} placeholder="z.B. 90" min="0"/>
+        <div>
+          <label className="block text-xs uppercase tracking-wider mb-1" style={{color:C.muted}}>Vibe-Notiz</label>
+          <input value={drehtag.vibeNote} onChange={e=>set('vibeNote')(e.target.value)}
+            placeholder="Kurz: wie war's?" className={IC}/>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CheckinTab = ({checkins,setCheckins})=>{
+  const [form,setForm]=useState(emptyCI());
+  const [err,setErr]=useState('');
+  const [saving,setSaving]=useState(false);
+  const wStart=getMon(), wEnd=getSun(wStart);
+  const hasThisWeek=checkins.some(c=>c.weekStart===wStart);
+  const set=k=>v=>setForm(f=>({...f,[k]:v}));
+  const setDrehtag=i=>patch=>setForm(f=>({...f,drehtage:f.drehtage.map((d,idx)=>idx===i?patch:d)}));
+
+  const submit=async()=>{
+    if(!form.followers){setErr('Follower-Zahl fehlt.');return;}
+    setErr('');
+    setSaving(true);
+    try {
+      const entry = await api.createCheckin({ followers: form.followers, drehtage: form.drehtage });
+      if (entry.error) { setErr(entry.error); setSaving(false); return; }
+      // Reload checkins from server
+      const updated = await api.getCheckins();
+      setCheckins(updated);
+      setForm(emptyCI());
+    } catch(e) {
+      setErr('Server nicht erreichbar: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  const del=async(id)=>{
+    await api.deleteCheckin(id);
+    setCheckins(checkins.filter(c=>c.id!==id));
+  };
+
+  const sorted=[...checkins].sort((a,b)=>b.weekStart.localeCompare(a.weekStart));
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <SecTitle icon="◈">Wöchentliches Check-in</SecTitle>
+        <p className="text-xs mb-4" style={{color:C.muted}}>
+          Woche: <span style={{color:C.text}}>{fmtW(wStart)}</span>
+          {hasThisWeek&&<span style={{color:C.yellow}} className="ml-2">— wird überschrieben</span>}
+        </p>
+        {/* Follower */}
+        <div className="flex items-end gap-4 mb-6">
+          <div className="w-48">
+            <Inp label="Follower gesamt" type="number" value={form.followers} onChange={set('followers')} placeholder="z.B. 4832" min="0"/>
+          </div>
+          {checkins.filter(c=>c.weekStart!==getMon()).length>0&&(()=>{
+            const prev=[...checkins].filter(c=>c.weekStart!==getMon()).sort((a,b)=>b.weekStart.localeCompare(a.weekStart))[0];
+            const delta=form.followers?Number(form.followers)-(prev.followers||0):null;
+            return delta!==null?(
+              <div className="pb-1">
+                <div className="text-xs mb-1" style={{color:C.muted}}>vs. Vorwoche ({prev.followers?.toLocaleString('de-DE')})</div>
+                <div className="text-lg font-bold" style={{color:delta>=0?C.sage:C.coral}}>
+                  {delta>=0?'+':''}{delta.toLocaleString('de-DE')}
+                </div>
+              </div>
+            ):null;
+          })()}
+        </div>
+        {/* 3 Drehtag Panels */}
+        <div className="rounded-xl p-4 mb-4" style={{background:CA(C.coral,.03),border:`1px solid ${CA(C.coral,.12)}`}}>
+          <h3 className="text-xs font-semibold uppercase tracking-widest mb-4 flex items-center gap-2" style={{color:C.coral}}>
+            🩺 Health Check — pro Drehtag
+            <span className="text-xs font-normal normal-case tracking-normal" style={{color:CA(C.muted,.7)}}>Nur ausfüllen was gedreht wurde</span>
+          </h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            {form.drehtage.map((dt,i)=>(
+              <DrehtagePanel key={i} drehtag={dt} idx={i} onChange={setDrehtag(i)}/>
+            ))}
+          </div>
+        </div>
+        {err&&<p className="text-xs mb-3" style={{color:C.coral}}>{err}</p>}
+        <Btn onClick={submit} disabled={saving}>{saving?'Speichert…':'Eintragen'}</Btn>
+      </Card>
+
+      <div>
+        <SecTitle icon="◈">Verlauf</SecTitle>
+        {sorted.length===0?<EmptyState text="Noch kein Check-in."/>:(
+          <div className="space-y-3">
+            {sorted.map(c=>{
+              const activeDT=(c.drehtage||[]).filter(d=>d.energie>0||d.erschoepfung>0||d.zeitaufwandMin>0);
+              return (
+                <Card key={c.id}>
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <div className="text-xs mb-1" style={{color:C.muted}}>{fmtW(c.weekStart)}</div>
+                      <div className="flex gap-5 flex-wrap">
+                        <div className="text-center">
+                          <div className="text-xs" style={{color:C.muted}}>Follower</div>
+                          <div className="text-base font-bold" style={{color:C.yellow}}>{c.followers?.toLocaleString('de-DE')}</div>
+                        </div>
+                        {c.followerDelta!=null&&c.followerDelta!==0&&(
+                          <div className="text-center">
+                            <div className="text-xs" style={{color:C.muted}}>Wachstum</div>
+                            <div className="text-base font-bold" style={{color:c.followerDelta>=0?C.sage:C.coral}}>
+                              {c.followerDelta>=0?'+':''}{c.followerDelta?.toLocaleString('de-DE')}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <Btn variant="danger" small onClick={()=>del(c.id)}>✕</Btn>
+                  </div>
+                  {activeDT.length>0&&(
+                    <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                      {activeDT.map((dt,i)=>{
+                        const colE=dt.energie>=7?C.sage:dt.energie>=4?C.yellow:C.coral;
+                        const colEx=dt.erschoepfung>=7?C.coral:dt.erschoepfung>=4?C.yellow:C.sage;
+                        return (
+                          <div key={i} className="flex-1 rounded-lg px-3 py-2" style={{background:CA(C.coral,.05),border:`1px solid ${CA(C.coral,.15)}`}}>
+                            <div className="text-xs font-semibold mb-1" style={{color:C.coral}}>{dt.label}{dt.datum&&<span className="ml-1 font-normal" style={{color:C.muted}}>{fmt(dt.datum)}</span>}</div>
+                            <div className="flex gap-3 flex-wrap">
+                              {dt.energie>0&&<span className="text-xs font-bold" style={{color:colE}}>⚡ {dt.energie}/10</span>}
+                              {dt.erschoepfung>0&&<span className="text-xs font-bold" style={{color:colEx}}>🩺 {dt.erschoepfung}/10</span>}
+                              {dt.zeitaufwandMin>0&&<span className="text-xs" style={{color:C.muted}}>{dt.zeitaufwandMin}min</span>}
+                              {dt.vibeNote&&<span className="text-xs italic" style={{color:CA(C.muted,.7)}}>"{dt.vibeNote}"</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── POST FORM ────────────────────────────────────────────────────────────────
+const emptyP=()=>({date:todayISO(),uploadTime:nowHM(),caption:'',views:'',likes:'',comments:'',saves:'',shares:'',
+  hookRate:'',completionRate:'',newFollowers:'',format:'Reel',theme:'',hookType:'Statement',duration:'15–30s',screenshot:null});
+
+const AI_FIELDS = ['views','likes','comments','saves','shares','hookRate','completionRate','newFollowers'];
+const FIELD_LABELS = {views:'Views',likes:'Likes',comments:'Kommentare',saves:'Saves',shares:'Shares',hookRate:'Hook Rate',completionRate:'Completion',newFollowers:'Neue Follower'};
+
+const PostForm = ({initial,onSave,onCancel})=>{
+  const [form,setForm]=useState(initial||emptyP());
+  const [parsing,setParsing]=useState(false);
+  const [parsedFields,setParsedFields]=useState([]);
+  const [parseError,setParseError]=useState('');
+  const set=k=>v=>setForm(f=>({...f,[k]:v}));
+  const fileRef=useRef();
+
+  const handleFile=e=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    // Store preview via FileReader for UI display
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+      const b64=ev.target.result;
+      set('screenshot')(b64); // keep base64 for preview only
+      setParsedFields([]);
+      setParseError('');
+      setParsing(true);
+      const result=await api.parseScreenshot(file);
+      setParsing(false);
+      if(result.error){setParseError(result.error);return;}
+      const d=result.data;
+      const filled=[];
+      setForm(f=>{
+        const next={...f,screenshot:b64};
+        AI_FIELDS.forEach(k=>{
+          if(d[k]!=null&&d[k]!==''){
+            next[k]=String(d[k]);
+            filled.push(k);
+          }
+        });
+        return next;
+      });
+      setParsedFields(filled);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const save=()=>{
+    if(!form.caption.trim()||!form.date) return;
+    onSave({...form,views:Number(form.views)||0,likes:Number(form.likes)||0,comments:Number(form.comments)||0,
+      saves:Number(form.saves)||0,shares:Number(form.shares)||0,
+      hookRate:Number(form.hookRate)||0,completionRate:Number(form.completionRate)||0,newFollowers:Number(form.newFollowers)||0});
+    if(!initial) setForm(emptyP());
+    setParsedFields([]);setParseError('');
+  };
+
+  const highlightStyle=(k)=>parsedFields.includes(k)?{
+    borderColor:CA(C.cyan,.7),boxShadow:`0 0 0 2px ${CA(C.cyan,.15)}`
+  }:{};
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Inp label="Datum" type="date" value={form.date} onChange={set('date')}/>
+        <Inp label="Upload-Uhrzeit" type="time" value={form.uploadTime} onChange={set('uploadTime')}/>
+        <Inp label="Caption (kurz)" value={form.caption} onChange={set('caption')} placeholder="Was war der Post?"/>
+      </div>
+
+      {/* AI Screenshot Section */}
+      <div className="rounded-xl p-4 space-y-3" style={{background:CA(C.cyan,.04),border:`1px solid ${CA(C.cyan,.2)}`}}>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold" style={{color:C.cyan}}>📸 Analytics Screenshot einlesen</p>
+            <p className="text-xs mt-0.5" style={{color:C.muted}}>Screenshot hochladen → KI liest alle Zahlen automatisch aus</p>
+          </div>
+          <span className="text-xs px-2 py-1 rounded-lg"
+            style={{color:C.sage,background:CA(C.sage,.08),border:`1px solid ${CA(C.sage,.2)}`}}>
+            🔑 Server-seitig
+          </span>
+        </div>
+
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile}/>
+
+        {!form.screenshot&&(
+          <button onClick={()=>fileRef.current.click()}
+            className="w-full rounded-xl py-6 flex flex-col items-center gap-2 transition-all duration-150 cursor-pointer"
+            style={{border:`2px dashed ${CA(C.cyan,.35)}`,background:CA(C.cyan,.03),color:C.muted}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=CA(C.cyan,.6);e.currentTarget.style.background=CA(C.cyan,.07);}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=CA(C.cyan,.35);e.currentTarget.style.background=CA(C.cyan,.03);}}>
+            <span style={{fontSize:28}}>📊</span>
+            <span className="text-xs font-medium">Analytics-Screenshot hier ablegen oder klicken</span>
+          </button>
+        )}
+
+        {parsing&&(
+          <div className="flex items-center gap-3 py-2">
+            <span className="lp" style={{color:C.cyan,fontSize:18}}>◈</span>
+            <span className="text-sm" style={{color:C.cyan}}>KI liest Zahlen aus…</span>
+          </div>
+        )}
+
+        {parseError&&(
+          <div className="rounded-lg px-3 py-2 text-xs" style={{background:CA(C.coral,.1),border:`1px solid ${CA(C.coral,.3)}`,color:C.coral}}>
+            ✕ {parseError}
+          </div>
+        )}
+
+        {parsedFields.length>0&&(
+          <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{background:CA(C.cyan,.08),border:`1px solid ${CA(C.cyan,.3)}`}}>
+            <p className="font-semibold" style={{color:C.cyan}}>✓ Erkannt & eingetragen:</p>
+            <p style={{color:C.text}}>{parsedFields.map(k=>FIELD_LABELS[k]).join(' · ')}</p>
+          </div>
+        )}
+
+        {form.screenshot&&(
+          <div className="flex items-start gap-3">
+            <img src={form.screenshot} alt="Screenshot" className="rounded-xl object-contain flex-shrink-0"
+              style={{maxHeight:120,maxWidth:160,border:`1px solid #2A2A38`}}/>
+            <div className="flex flex-col gap-2">
+              {!parsing&&<Btn variant="cyan" small onClick={()=>fileRef.current.click()}>Anderen hochladen</Btn>}
+              <Btn variant="danger" small onClick={()=>{set('screenshot')(null);setParsedFields([]);setParseError('');}}>Entfernen</Btn>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Engagement */}
+      <div>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{color:C.muted}}>
+          Engagement
+          {parsedFields.some(k=>['views','likes','comments','saves','shares'].includes(k))&&
+            <span className="ml-2 normal-case" style={{color:C.cyan}}>— von KI befüllt ✓</span>}
+        </label>
+        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-5 gap-2">
+          {['views','likes','comments','saves','shares'].map(k=>(
+            <div key={k}>
+              <label className="block text-xs text-muted mb-1 uppercase tracking-wider">{FIELD_LABELS[k]}</label>
+              <input type="number" value={form[k]} onChange={e=>set(k)(e.target.value)} placeholder="0" min="0"
+                className={IC} style={highlightStyle(k)}/>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Retention KPIs */}
+      <div>
+        <label className="block text-xs uppercase tracking-wider mb-2" style={{color:C.muted}}>
+          Retention Metriken
+          {parsedFields.some(k=>['hookRate','completionRate','newFollowers'].includes(k))&&
+            <span className="ml-2 normal-case" style={{color:C.cyan}}>— von KI befüllt ✓</span>}
+        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {[['hookRate','Hook Rate %','z.B. 72','0','100'],['completionRate','Completion Rate %','z.B. 58','0','100'],['newFollowers','Neue Follower','z.B. 45','0',null]].map(([k,lbl,ph,mn,mx])=>(
+            <div key={k}>
+              <label className="block text-xs text-muted mb-1 uppercase tracking-wider">{lbl}</label>
+              <input type="number" value={form[k]} onChange={e=>set(k)(e.target.value)} placeholder={ph} min={mn} max={mx||undefined}
+                className={IC} style={highlightStyle(k)}/>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tags */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <Sel label="Format" value={form.format} onChange={set('format')} options={FORMAT_OPTIONS}/>
+        <Sel label="Hook-Typ" value={form.hookType} onChange={set('hookType')} options={HOOK_OPTIONS}/>
+        <Sel label="Länge" value={form.duration} onChange={set('duration')} options={DURATION_OPTIONS}/>
+        <Inp label="Thema" value={form.theme} onChange={set('theme')} placeholder="z.B. Büro-Trauma"/>
+      </div>
+
+      <div className="flex gap-2">
+        <Btn onClick={save}>{initial?'Speichern':'+ Post hinzufügen'}</Btn>
+        {onCancel&&<Btn variant="ghost" onClick={onCancel}>Abbrechen</Btn>}
+      </div>
+    </div>
+  );
+};
+
+// ─── POSTS TAB ────────────────────────────────────────────────────────────────
+const PostsTab = ({posts,setPosts,timeFilter})=>{
+  const [showForm,setShowForm]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const [fmtF,setFmtF]=useState(null);
+  const [hookF,setHookF]=useState(null);
+  const [durF,setDurF]=useState(null);
+  const [themeF,setThemeF]=useState(null);
+  const [sortKey,setSortKey]=useState('amplification');
+
+  const themes=useMemo(()=>[...new Set(posts.map(p=>p.theme).filter(Boolean))],[posts]);
+
+  const filtered=useMemo(()=>{
+    let r=posts;
+    // timeFilter applied server-side via API, but posts here are already pre-filtered on initial load
+    // for client-side tab switching without refetch we still apply local filter
+    if(timeFilter){
+      const cut=new Date();cut.setDate(cut.getDate()-timeFilter);
+      r=r.filter(p=>new Date(p.date+'T12:00:00')>=cut);
+    }
+    if(fmtF)   r=r.filter(p=>p.format===fmtF);
+    if(hookF)  r=r.filter(p=>p.hookType===hookF);
+    if(durF)   r=r.filter(p=>p.duration===durF);
+    if(themeF) r=r.filter(p=>p.theme===themeF);
+    return [...r].sort((a,b)=>{
+      if(sortKey==='date') return b.date.localeCompare(a.date);
+      if(sortKey==='views') return (b.views||0)-(a.views||0);
+      return (b.kpis?.[sortKey]??-Infinity)-(a.kpis?.[sortKey]??-Infinity);
+    });
+  },[posts,timeFilter,fmtF,hookF,durF,themeF,sortKey]);
+
+  const addPost=async(d)=>{
+    const created=await api.createPost(d);
+    if(created.error){alert('Fehler: '+created.error);return;}
+    setPosts([created,...posts]);
+    setShowForm(false);
+  };
+  const updatePost=async(d)=>{
+    const updated=await api.updatePost(editId,d);
+    if(updated.error){alert('Fehler: '+updated.error);return;}
+    setPosts(posts.map(p=>p.id===editId?updated:p));
+    setEditId(null);
+  };
+  const del=async(id)=>{
+    await api.deletePost(id);
+    setPosts(posts.filter(p=>p.id!==id));
+  };
+
+  const filterActive=fmtF||hookF||durF||themeF;
+
+  return (
+    <div className="space-y-5">
+      {/* Add form */}
+      <Card>
+        <div className="flex items-center justify-between cursor-pointer select-none" onClick={()=>setShowForm(s=>!s)}>
+          <SecTitle icon="✦" className="mb-0">Neuen Post eintragen</SecTitle>
+          <span style={{color:C.muted,fontSize:20,lineHeight:1}}>{showForm?'−':'+'}</span>
+        </div>
+        <div className={`overflow-hidden transition-all duration-200 ${showForm?'max-h-[900px] mt-5 opacity-100':'max-h-0 opacity-0'}`}>
+          <PostForm onSave={addPost}/>
+        </div>
+      </Card>
+
+      {/* Filters + Sort */}
+      <Card className="space-y-3">
+        <div className="flex items-center justify-between">
+          <SecTitle icon="⊹" className="mb-0">Filter & Sortierung</SecTitle>
+          {filterActive&&<button className="text-xs" style={{color:C.coral}} onClick={()=>{setFmtF(null);setHookF(null);setDurF(null);setThemeF(null)}}>✕ Reset</button>}
+        </div>
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs uppercase tracking-wider" style={{color:CA(C.muted,.7)}}>Format:</span>
+            <Chip label="Alle" active={!fmtF} onClick={()=>setFmtF(null)}/>
+            {FORMAT_OPTIONS.map(f=><Chip key={f} label={f} active={fmtF===f} onClick={()=>setFmtF(fmtF===f?null:f)}/>)}
+          </div>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs uppercase tracking-wider" style={{color:CA(C.muted,.7)}}>Hook:</span>
+            {HOOK_OPTIONS.map(h=><Chip key={h} label={h} active={hookF===h} onClick={()=>setHookF(hookF===h?null:h)}/>)}
+          </div>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs uppercase tracking-wider" style={{color:CA(C.muted,.7)}}>Länge:</span>
+            {DURATION_OPTIONS.map(d=><Chip key={d} label={d} active={durF===d} onClick={()=>setDurF(durF===d?null:d)}/>)}
+          </div>
+          {themes.length>0&&(
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs uppercase tracking-wider" style={{color:CA(C.muted,.7)}}>Thema:</span>
+              {themes.map(t=><Chip key={t} label={t} active={themeF===t} onClick={()=>setThemeF(themeF===t?null:t)}/>)}
+            </div>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-xs uppercase tracking-wider" style={{color:CA(C.muted,.7)}}>Sortieren:</span>
+            <select value={sortKey} onChange={e=>setSortKey(e.target.value)}
+              className="rounded-lg bg-elevated border border-border text-text text-xs px-2 py-1 appearance-none pr-6 focus:outline-none"
+              style={{minWidth:140}}>
+              {SORT_OPTIONS.map(s=><option key={s.key} value={s.key} className="bg-elevated">{s.label} ↓</option>)}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Posts */}
+      <p className="text-xs" style={{color:CA(C.muted,.6)}}>{filtered.length} Posts</p>
+      {filtered.length===0?<EmptyState text="Keine Posts in diesem Zeitraum."/>:(
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {filtered.map(p=>{
+            if(editId===p.id) return (
+              <Card key={p.id} className="md:col-span-2">
+                <PostForm initial={p} onSave={updatePost} onCancel={()=>setEditId(null)}/>
+              </Card>
+            );
+            const kpiVals=Object.entries(KPIS).map(([k])=>({key:k,val:p.kpis?.[k]})).filter(x=>x.val!==null&&x.val!==undefined);
+            return (
+              <Card key={p.id} className="hover:bg-elevated group">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-xs" style={{color:C.muted}}>{fmt(p.date)}</span>
+                      {p.uploadTime&&<span className="text-xs" style={{color:CA(C.muted,.6)}}>⏰ {p.uploadTime}</span>}
+                    </div>
+                    <div className="text-sm font-medium truncate" style={{color:C.text}}>{p.caption}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <FmtBadge format={p.format}/>
+                    <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <Btn variant="ghost" small onClick={()=>setEditId(p.id)}>✎</Btn>
+                      <Btn variant="danger" small onClick={()=>del(p.id)}>✕</Btn>
+                    </div>
+                  </div>
+                </div>
+                {/* Metrics row */}
+                <div className="grid grid-cols-5 gap-1 text-center mb-3 py-2 rounded-xl overflow-hidden" style={{background:CA(C.muted,.05)}}>
+                  {[['Views',p.views],['Likes',p.likes],['Cmts',p.comments],['Saves',p.saves],['Shares',p.shares]].map(([k,v])=>(
+                    <div key={k}>
+                      <div style={{fontSize:'10px',color:C.muted,lineHeight:1.2}}>{k}</div>
+                      <div className="text-xs font-semibold" style={{color:C.text}}>{(v||0).toLocaleString('de-DE')}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* KPI chips */}
+                {kpiVals.length>0&&(
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {kpiVals.map(({key,val})=><KpiChip key={key} kpiKey={key} value={val}/>)}
+                  </div>
+                )}
+                {/* Tag chips */}
+                <div className="flex flex-wrap gap-1">
+                  {[p.hookType,p.duration,p.theme].filter(Boolean).map(t=>(
+                    <span key={t} className="text-xs rounded-full px-2 py-0.5 border" style={{color:C.muted,borderColor:'#2A2A38'}}>{t}</span>
+                  ))}
+                  {p.newFollowers>0&&<span className="text-xs rounded-full px-2 py-0.5 border" style={{color:C.sage,borderColor:CA(C.sage,.3)}}>+{p.newFollowers} Follower</span>}
+                  {p.screenshot&&<span className="text-xs rounded-full px-2 py-0.5 border" style={{color:C.violet,borderColor:CA(C.violet,.3)}}>📎 Screenshot</span>}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── IDEAS TAB ────────────────────────────────────────────────────────────────
+const STATUS_NEXT={'Idee':'In Produktion','In Produktion':'Live','Live':'Idee'};
+const IdeaCard=({idea,posts,onUpdate,onDelete})=>{
+  const [ed,setEd]=useState(false);
+  const [form,setForm]=useState({text:idea.text,category:idea.category});
+  if(ed) return (
+    <Card className="space-y-2">
+      <input autoFocus className={IC} value={form.text} onChange={e=>setForm(f=>({...f,text:e.target.value}))} placeholder="Idee..."/>
+      <input className={IC+' text-xs'} value={form.category||''} onChange={e=>setForm(f=>({...f,category:e.target.value}))} placeholder="Kategorie"/>
+      <div className="flex gap-2"><Btn small onClick={()=>{onUpdate(form);setEd(false)}}>Speichern</Btn><Btn small variant="ghost" onClick={()=>setEd(false)}>Abbrechen</Btn></div>
+    </Card>
+  );
+  return (
+    <Card className="hover:bg-elevated group">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <p className="text-sm leading-snug flex-1" style={{color:C.text}}>{idea.text}</p>
+        <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+          <Btn variant="ghost" small onClick={()=>setEd(true)}>✎</Btn>
+          <Btn variant="danger" small onClick={onDelete}>✕</Btn>
+        </div>
+      </div>
+      {idea.category&&<span className="inline-block text-xs rounded-full px-2 py-0.5 mb-2 border" style={{color:C.violet,borderColor:CA(C.violet,.3),background:CA(C.violet,.08)}}>{idea.category}</span>}
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        <button onClick={()=>onUpdate({status:STATUS_NEXT[idea.status]})} title="Status weiterschalten"><StatusBadge status={idea.status}/></button>
+        {idea.status==='Live'&&(
+          <select className="flex-1 text-xs bg-elevated border border-border rounded-lg px-2 py-1 focus:outline-none appearance-none"
+            style={{color:C.muted,minWidth:0}} value={idea.linkedPostId||''}
+            onChange={e=>onUpdate({linkedPostId:e.target.value||undefined})}>
+            <option value="">— Post verknüpfen</option>
+            {posts.map(p=><option key={p.id} value={p.id} className="bg-elevated">{fmt(p.date)} · {p.caption.slice(0,22)}</option>)}
+          </select>
+        )}
+      </div>
+    </Card>
+  );
+};
+const COL_ICONS={'Idee':'✦','In Produktion':'⟡','Live':'★'};
+const COL_COLORS={'Idee':C.violet,'In Produktion':C.yellow,'Live':C.sage};
+const IdeasTab=({ideas,setIdeas,posts})=>{
+  const [text,setText]=useState('');
+  const [cat,setCat]=useState('');
+  const add=async()=>{
+    if(!text.trim())return;
+    const created=await api.createIdea({text:text.trim(),category:cat.trim()});
+    if(created.error){alert('Fehler: '+created.error);return;}
+    setIdeas([created,...ideas]);
+    setText('');setCat('');
+  };
+  const upd=async(id,patch)=>{
+    const updated=await api.updateIdea(id,patch);
+    if(updated.error){alert('Fehler: '+updated.error);return;}
+    setIdeas(ideas.map(i=>i.id===id?updated:i));
+  };
+  const del=async(id)=>{
+    await api.deleteIdea(id);
+    setIdeas(ideas.filter(i=>i.id!==id));
+  };
+  const byS=s=>ideas.filter(i=>i.status===s);
+  return (
+    <div className="space-y-5">
+      <Card>
+        <SecTitle icon="★" accent="violet">Neue Idee</SecTitle>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input className={IC+' flex-1'} value={text} onChange={e=>setText(e.target.value)} placeholder="Was schwebt dir vor...?" onKeyDown={e=>e.key==='Enter'&&add()}/>
+          <input className={IC+' sm:w-32'} value={cat} onChange={e=>setCat(e.target.value)} placeholder="Kategorie" onKeyDown={e=>e.key==='Enter'&&add()}/>
+          <Btn onClick={add} className="w-full sm:w-auto">+ Idee</Btn>
+        </div>
+      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {STATUS_OPTIONS.map(s=>(
+          <div key={s} className="rounded-2xl p-4 min-h-[240px]" style={{border:`1px solid ${CA(COL_COLORS[s],.15)}`,background:CA(COL_COLORS[s],.04)}}>
+            <div className="flex items-center gap-2 mb-4">
+              <span style={{color:COL_COLORS[s]}}>{COL_ICONS[s]}</span>
+              <h3 className="text-xs font-semibold uppercase tracking-widest" style={{color:C.muted}}>{s}</h3>
+              <span className="ml-auto text-xs rounded-full px-2 py-0.5" style={{color:C.muted,background:CA(C.muted,.1)}}>{byS(s).length}</span>
+            </div>
+            <div className="space-y-2">
+              {byS(s).map(idea=><IdeaCard key={idea.id} idea={idea} posts={posts} onUpdate={p=>upd(idea.id,p)} onDelete={()=>del(idea.id)}/>)}
+              {byS(s).length===0&&<p className="text-xs text-center py-6 italic" style={{color:CA(C.muted,.3)}}>leer</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── OVERVIEW TAB ─────────────────────────────────────────────────────────────
+const OverviewTab=({checkins,posts,timeFilter,overview})=>{
+  const [topKpi,setTopKpi]=useState('amplification');
+
+  // If overview data is available from server, use it. Otherwise compute locally.
+  const sd = overview?.statCards;
+  const followerChartData = overview?.followerChartData || [];
+  const healthChartData   = overview?.healthChartData   || [];
+  const serverMatrix      = overview?.formatMatrix      || [];
+
+  // Locally derived chart data (used when overview not yet loaded, or as fallback)
+  const filtP=useMemo(()=>{
+    if(!timeFilter) return posts;
+    const cut=new Date();cut.setDate(cut.getDate()-timeFilter);
+    return posts.filter(p=>new Date(p.date+'T12:00:00')>=cut);
+  },[posts,timeFilter]);
+
+  // Top posts — computed client-side from enriched posts returned by server
+  const topPosts=useMemo(()=>{
+    return [...filtP].filter(p=>p.kpis?.[topKpi]!==null&&p.kpis?.[topKpi]!==undefined)
+      .sort((a,b)=>(b.kpis[topKpi]??-Infinity)-(a.kpis[topKpi]??-Infinity)).slice(0,5);
+  },[filtP,topKpi]);
+
+  const latest=useMemo(()=>[...checkins].sort((a,b)=>b.weekStart.localeCompare(a.weekStart))[0],[checkins]);
+
+  const statCards=[
+    {label:'Follower',val:sd?.latestFollowers!=null?sd.latestFollowers.toLocaleString('de-DE'):(latest?latest.followers.toLocaleString('de-DE'):null),sub:'letzter Check-in',color:C.yellow,grad:'yellow'},
+    {label:'Wachstum',val:sd?.latestFollowerDelta!=null?`${sd.latestFollowerDelta>=0?'+':''}${sd.latestFollowerDelta}`:(latest?`${latest.followerDelta>=0?'+':''}${latest.followerDelta}`:null),sub:'letzte Woche',color:(sd?.latestFollowerDelta??latest?.followerDelta)>=0?C.sage:C.coral,grad:(sd?.latestFollowerDelta??latest?.followerDelta)>=0?'sage':'coral'},
+    {label:'Posts',val:sd?.totalPosts??filtP.length,sub:'im Zeitraum',color:C.cyan,grad:'cyan'},
+    {label:'Ø Amplification',val:sd?.avgAmplification!=null?`${sd.avgAmplification.toFixed(1)}%`:null,sub:KPIS.amplification.desc,color:C.cyan,grad:'cyan'},
+    {label:'Ø Hook Rate',val:sd?.avgHookRate!=null?`${sd.avgHookRate.toFixed(1)}%`:null,sub:KPIS.hookRate.desc,color:C.coral,grad:'coral'},
+    {label:'Ø Completion',val:sd?.avgCompletion!=null?`${sd.avgCompletion.toFixed(1)}%`:null,sub:KPIS.completion.desc,color:C.sage,grad:'sage'},
+  ];
+
+  // Format the follower chart names to match original (date strings)
+  const chartData=followerChartData.length>0
+    ? followerChartData.map(c=>({...c,name:fmt(c.weekStart)||c.name}))
+    : [...checkins].sort((a,b)=>a.weekStart.localeCompare(b.weekStart)).map(c=>({name:fmt(c.weekStart),val:c.followers,erschoepfung:c.erschoepfung||0,energie:c.drehenEnergie||0}));
+
+  const exhData=(healthChartData.length>0
+    ? healthChartData.map(c=>({...c,name:fmt(c.weekStart)||c.name}))
+    : chartData.filter(d=>d.erschoepfung>0));
+
+  const formatMatrix=serverMatrix.length>0 ? serverMatrix : [];
+
+  return (
+    <div className="space-y-6">
+      {/* 6 Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {statCards.map((s,i)=>(
+          <div key={i} className={`rounded-2xl p-5 border border-border/60 grad-${s.grad}`}>
+            <div className="text-xs font-semibold uppercase tracking-widest mb-1" style={{color:CA(C.muted,.8)}}>{s.label}</div>
+            <div className="text-2xl font-bold" style={{color:s.color}}>{s.val??'—'}</div>
+            <div className="text-xs mt-1" style={{color:CA(C.muted,.6)}}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Dual chart */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <SecTitle icon="⟡" accent="cyan">Follower-Verlauf</SecTitle>
+          <LineChart data={chartData} valueKey="val" labelKey="name" color={C.cyan}/>
+        </Card>
+        <Card>
+          <SecTitle icon="🩺" accent="coral">Erschöpfungs-Score</SecTitle>
+          {exhData.length>0?(
+            <BarChart data={exhData} valueKey="erschoepfung" labelKey="name" height={160}
+              colorFn={v=>v>=7?C.coral:v>=4?C.yellow:C.sage}/>
+          ):<EmptyState text="Noch keine Health-Daten eingetragen."/>}
+        </Card>
+      </div>
+
+      {/* Format Matrix */}
+      {formatMatrix.length>0&&(
+        <Card>
+          <SecTitle icon="✦" accent="yellow">Format-Performance</SecTitle>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/60">
+                  {['Format','Posts','Ø Amplif.','Ø Hook Rate','Ø Views'].map(h=>(
+                    <th key={h} className="text-left pb-2 pr-4 text-xs uppercase tracking-wider" style={{color:C.muted}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...formatMatrix].sort((a,b)=>(b.kpis?.amplification??0)-(a.kpis?.amplification??0)).map(r=>{
+                  const ampl=r.kpis?.amplification!=null?r.kpis.amplification.toFixed(1):null;
+                  const hook=r.kpis?.hookRate!=null?r.kpis.hookRate.toFixed(0):null;
+                  // avg views not directly in server matrix — derive from posts
+                  const fmtPosts=filtP.filter(p=>p.format===r.format&&p.views>0);
+                  const avgViews=fmtPosts.length?Math.round(fmtPosts.reduce((s,p)=>s+p.views,0)/fmtPosts.length):null;
+                  return (
+                    <tr key={r.format} className="border-b border-border/30">
+                      <td className="py-2 pr-4"><FmtBadge format={r.format}/></td>
+                      <td className="py-2 pr-4 text-xs" style={{color:C.muted}}>{r.count}</td>
+                      <td className="py-2 pr-4 font-bold text-xs" style={{color:ampl?kpiColor('amplification',ampl):C.muted}}>{ampl?`${ampl}%`:'—'}</td>
+                      <td className="py-2 pr-4 font-bold text-xs" style={{color:hook?kpiColor('hookRate',hook):C.muted}}>{hook?`${hook}%`:'—'}</td>
+                      <td className="py-2 text-xs" style={{color:C.muted}}>{avgViews?.toLocaleString('de-DE')??'—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Top Posts */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <SecTitle icon="★" className="mb-0">Top Posts</SecTitle>
+          <select value={topKpi} onChange={e=>setTopKpi(e.target.value)}
+            className="text-xs bg-elevated border border-border rounded-lg px-2 py-1 appearance-none pr-6 focus:outline-none"
+            style={{color:C.text}}>
+            {Object.entries(KPIS).map(([k,kpi])=><option key={k} value={k} className="bg-elevated">nach {kpi.label}</option>)}
+          </select>
+        </div>
+        {topPosts.length===0?<EmptyState text="Noch keine Posts mit Daten."/>:(
+          <div className="space-y-2">
+            {topPosts.map((p,i)=>{
+              const kpi=KPIS[topKpi]; const val=p.kpis?.[topKpi];
+              return (
+                <div key={p.id} className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0">
+                  <div className="text-xl font-serif w-7 shrink-0 text-center" style={{color:i===0?C.yellow:CA(C.muted,.4)}}>{i+1}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate" style={{color:C.text}}>{p.caption}</div>
+                    <div className="flex gap-2 mt-0.5 flex-wrap">
+                      <span className="text-xs" style={{color:C.muted}}>{fmt(p.date)}</span>
+                      <FmtBadge format={p.format}/>
+                      {p.theme&&<span className="text-xs" style={{color:C.coral}}>{p.theme}</span>}
+                      {p.uploadTime&&<span className="text-xs" style={{color:CA(C.muted,.5)}}>⏰{p.uploadTime}</span>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-lg font-bold" style={{color:kpiColor(topKpi,val)}}>{val}{kpi.unit}</div>
+                    <div className="text-xs" style={{color:C.muted}}>{kpi.label}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// ─── QUICK ADD PANEL ──────────────────────────────────────────────────────────
+const QuickAdd = ({posts,setPosts})=>{
+  const [open,setOpen]=useState(false);
+  const [form,setForm]=useState(()=>({caption:'',views:'',saves:'',shares:'',hookRate:'',completionRate:'',newFollowers:'',likes:'',comments:'',format:'Reel',date:todayISO(),uploadTime:nowHM()}));
+  const set=k=>v=>setForm(f=>({...f,[k]:v}));
+  const fileRef=useRef();
+  const [screenshot,setScreenshot]=useState(null);
+  const [screenshotFile,setScreenshotFile]=useState(null);
+  const [parsing,setParsing]=useState(false);
+  const [parsedFields,setParsedFields]=useState([]);
+  const [parseError,setParseError]=useState('');
+
+  const handleFile=e=>{
+    const f=e.target.files[0];if(!f)return;
+    setScreenshotFile(f);
+    const r=new FileReader();
+    r.onload=async ev=>{
+      const b64=ev.target.result;
+      setScreenshot(b64);
+      setParsedFields([]);setParseError('');
+      setParsing(true);
+      const result=await api.parseScreenshot(f);
+      setParsing(false);
+      if(result.error){setParseError(result.error);return;}
+      const d=result.data; const filled=[];
+      setForm(f=>{
+        const next={...f};
+        AI_FIELDS.forEach(k=>{if(d[k]!=null&&d[k]!==''){next[k]=String(d[k]);filled.push(k);}});
+        return next;
+      });
+      setParsedFields(filled);
+    };
+    r.readAsDataURL(f);
+  };
+
+  const save=async()=>{
+    if(!form.caption.trim()) return;
+    const data={
+      hookType:'Statement',duration:'15–30s',theme:'',
+      ...form,
+      views:Number(form.views)||0,saves:Number(form.saves)||0,shares:Number(form.shares)||0,
+      likes:Number(form.likes)||0,comments:Number(form.comments)||0,
+      hookRate:Number(form.hookRate)||0,completionRate:Number(form.completionRate)||0,newFollowers:Number(form.newFollowers)||0,
+      screenshot:screenshot||null,
+    };
+    const created=await api.createPost(data);
+    if(created.error){alert('Fehler: '+created.error);return;}
+    setPosts([created,...posts]);
+    setForm({caption:'',views:'',saves:'',shares:'',hookRate:'',completionRate:'',newFollowers:'',likes:'',comments:'',format:'Reel',date:todayISO(),uploadTime:nowHM()});
+    setScreenshot(null);setScreenshotFile(null);setParsedFields([]);setParseError('');
+    setOpen(false);
+  };
+
+  return (
+    <>
+      {/* FAB */}
+      <button onClick={()=>setOpen(o=>!o)}
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 rounded-2xl font-bold text-sm shadow-2xl transition-all duration-200"
+        style={{background:open?CA(C.coral,.9):C.yellow,color:'#0A0A0F',padding:'11px 16px',boxShadow:`0 8px 32px ${CA(open?C.coral:C.yellow,.4)}`}}>
+        {open?'✕':'⚡ Quick Add'}
+      </button>
+      {/* Panel */}
+      {open&&(
+        <div className="fixed bottom-16 sm:bottom-20 left-4 right-4 sm:left-auto sm:right-6 z-50 slide-up rounded-2xl p-4 sm:p-5 shadow-2xl sm:w-80"
+          style={{background:'#1C1C24',border:`1px solid ${CA(C.yellow,.3)}`,boxShadow:`0 16px 48px rgba(0,0,0,.6)`,maxHeight:'80vh',overflowY:'auto'}}>
+          <h3 className="font-serif text-base mb-3" style={{color:C.yellow}}>⚡ Quick Add</h3>
+          <div className="space-y-2">
+            <input className={IC} value={form.caption} onChange={e=>set('caption')(e.target.value)} placeholder="Caption *" onKeyDown={e=>e.key==='Enter'&&save()}/>
+            <div className="grid grid-cols-2 gap-2">
+              <Inp label="Datum" type="date" value={form.date} onChange={set('date')}/>
+              <Inp label="Uhrzeit" type="time" value={form.uploadTime} onChange={set('uploadTime')}/>
+            </div>
+
+            {/* AI screenshot upload */}
+            <div className="rounded-xl p-3 space-y-2" style={{background:CA(C.cyan,.05),border:`1px solid ${CA(C.cyan,.2)}`}}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold" style={{color:C.cyan}}>📸 Analytics einlesen</span>
+                <span className="text-xs px-1.5 py-0.5 rounded"
+                  style={{color:C.sage,background:CA(C.sage,.08),border:`1px solid ${CA(C.sage,.2)}`}}>
+                  🔑 Server
+                </span>
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile}/>
+              {!screenshot?(
+                <button onClick={()=>fileRef.current.click()}
+                  className="w-full rounded-lg py-3 text-xs flex items-center justify-center gap-2"
+                  style={{border:`2px dashed ${CA(C.cyan,.3)}`,background:'transparent',color:C.muted}}>
+                  📊 Screenshot hochladen
+                </button>
+              ):(
+                <div className="flex items-center gap-2">
+                  <img src={screenshot} alt="" className="rounded-lg object-contain flex-shrink-0" style={{height:48,width:72,border:`1px solid #2A2A38`}}/>
+                  <div className="flex-1 min-w-0">
+                    {parsing&&<p className="text-xs flex items-center gap-1" style={{color:C.cyan}}><span className="lp">◈</span> Liest aus…</p>}
+                    {parseError&&<p className="text-xs" style={{color:C.coral}}>✕ {parseError}</p>}
+                    {parsedFields.length>0&&<p className="text-xs" style={{color:C.cyan}}>✓ {parsedFields.length} Felder</p>}
+                  </div>
+                  <button onClick={()=>{setScreenshot(null);setScreenshotFile(null);setParsedFields([]);setParseError('');}} className="text-xs" style={{color:C.muted}}>✕</button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {['views','saves','shares'].map(k=>(
+                <div key={k}>
+                  <label className="block text-xs text-muted mb-1 uppercase tracking-wider">{FIELD_LABELS[k]}</label>
+                  <input type="number" value={form[k]} onChange={e=>set(k)(e.target.value)} placeholder="0" min="0"
+                    className={IC} style={parsedFields.includes(k)?{borderColor:CA(C.cyan,.7),boxShadow:`0 0 0 2px ${CA(C.cyan,.15)}`}:{}}/>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-muted mb-1 uppercase tracking-wider">Hook Rate %</label>
+                <input type="number" value={form.hookRate} onChange={e=>set('hookRate')(e.target.value)} placeholder="z.B. 72" min="0" max="100"
+                  className={IC} style={parsedFields.includes('hookRate')?{borderColor:CA(C.cyan,.7),boxShadow:`0 0 0 2px ${CA(C.cyan,.15)}`}:{}}/>
+              </div>
+              <Sel label="Format" value={form.format} onChange={set('format')} options={FORMAT_OPTIONS}/>
+            </div>
+            <Btn onClick={save} className="w-full">Post speichern</Btn>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ─── MIGRATION BANNER ─────────────────────────────────────────────────────────
+// One-time tool to move localStorage data to the server
+const MigrateBanner = ({onMigrated})=>{
+  const [show,setShow]=useState(false);
+  const [status,setStatus]=useState('');
+
+  useEffect(()=>{
+    // Check if there's anything in localStorage to migrate
+    try {
+      const p=localStorage.getItem('anna_posts_v1');
+      const c=localStorage.getItem('anna_checkins_v1');
+      const i=localStorage.getItem('anna_ideas_v1');
+      const hasData=(p&&JSON.parse(p).length>0)||(c&&JSON.parse(c).length>0)||(i&&JSON.parse(i).length>0);
+      if(hasData) setShow(true);
+    } catch {}
+  },[]);
+
+  const migrate=async()=>{
+    setStatus('Migriere…');
+    try {
+      const posts=JSON.parse(localStorage.getItem('anna_posts_v1')||'[]');
+      const checkins=JSON.parse(localStorage.getItem('anna_checkins_v1')||'[]');
+      const ideas=JSON.parse(localStorage.getItem('anna_ideas_v1')||'[]');
+      const result=await api.migrate({posts,checkins,ideas});
+      if(result.error){setStatus('Fehler: '+result.error);return;}
+      setStatus(`Importiert: ${result.imported.posts} Posts, ${result.imported.checkins} Check-ins, ${result.imported.ideas} Ideen`);
+      // Clear localStorage after successful migration
+      localStorage.removeItem('anna_posts_v1');
+      localStorage.removeItem('anna_checkins_v1');
+      localStorage.removeItem('anna_ideas_v1');
+      setTimeout(()=>{setShow(false);onMigrated();},2000);
+    } catch(e) {
+      setStatus('Server nicht erreichbar: '+e.message);
+    }
+  };
+
+  if(!show) return null;
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 px-4 py-3" style={{background:CA(C.violet,.95),backdropFilter:'blur(8px)'}}>
+      <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+        <div>
+          <p className="text-sm font-semibold" style={{color:C.text}}>📦 Lokale Daten gefunden</p>
+          <p className="text-xs mt-0.5" style={{color:CA(C.text,.7)}}>Du hast Daten im alten localStorage-Format. Einmalig auf den Server migrieren?</p>
+          {status&&<p className="text-xs mt-1" style={{color:C.yellow}}>{status}</p>}
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Btn small onClick={migrate}>Jetzt migrieren</Btn>
+          <Btn small variant="ghost" onClick={()=>setShow(false)}>Später</Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+const App = ()=>{
+  const [checkins, setCheckins] = useState([]);
+  const [posts,    setPosts]    = useState([]);
+  const [ideas,    setIdeas]    = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [tab,      setTab]      = useState('overview');
+  const [tf,       setTf]       = useState(28);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState('');
+
+  const loadAll = useCallback(async (days) => {
+    try {
+      const [ovr, postsData, checkinsData, ideasData] = await Promise.all([
+        api.getOverview(days != null ? { days } : {}),
+        api.getPosts(),
+        api.getCheckins(),
+        api.getIdeas(),
+      ]);
+      setOverview(ovr);
+      setPosts(postsData);
+      setCheckins(checkinsData);
+      setIdeas(ideasData);
+      setLoading(false);
+    } catch(e) {
+      setError('Server nicht erreichbar. Läuft er auf http://localhost:3001?');
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(()=>{ loadAll(tf); }, [tf]);
+
+  if(loading) return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',color:'#6B7280',fontSize:14,gap:12}}>
+      <span className="lp" style={{fontSize:28,color:'#FFD93D'}}>◈</span>
+      <span>Verbinde mit Server…</span>
+    </div>
+  );
+
+  if(error) return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',color:'#6B7280',fontSize:14,gap:12,padding:24,textAlign:'center'}}>
+      <span style={{fontSize:32}}>⚠️</span>
+      <p style={{color:'#FF6B6B',fontWeight:600}}>{error}</p>
+      <p style={{fontSize:12}}>Starte den Server mit: <code style={{background:'#1C1C24',padding:'2px 8px',borderRadius:6,color:'#4ECDC4'}}>cd server && npm start</code></p>
+      <button onClick={()=>{setError('');setLoading(true);loadAll(tf);}}
+        style={{marginTop:8,padding:'8px 20px',borderRadius:12,background:'#FFD93D',color:'#0A0A0F',fontWeight:700,cursor:'pointer',border:'none'}}>
+        Nochmal versuchen
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-bg text-text font-sans">
+      <MigrateBanner onMigrated={()=>loadAll(tf)}/>
+      <Header timeFilter={tf} setTimeFilter={setTf}/>
+      <TabNav active={tab} setActive={setTab}/>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-28">
+        {tab==='overview'&&<OverviewTab checkins={checkins} posts={posts} timeFilter={tf} overview={overview}/>}
+        {tab==='posts'   &&<PostsTab posts={posts} setPosts={setPosts} timeFilter={tf}/>}
+        {tab==='ideas'   &&<IdeasTab ideas={ideas} setIdeas={setIdeas} posts={posts}/>}
+        {tab==='checkin' &&<CheckinTab checkins={checkins} setCheckins={setCheckins}/>}
+      </main>
+      <footer className="border-t border-border/30 mt-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex justify-between">
+          <span className="font-serif italic text-xs" style={{color:CA(C.muted,.4)}}>anna.exe — Content Cockpit</span>
+          <span className="text-xs" style={{color:CA(C.muted,.3)}}>Server: localhost:3001</span>
+        </div>
+      </footer>
+      <QuickAdd posts={posts} setPosts={setPosts}/>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
