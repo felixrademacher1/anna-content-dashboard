@@ -1,16 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 
+// On Vercel, process.cwd() is the project root (/var/task)
+// Locally, __dirname is server/logic/ so ../../ is project root
+const ROOT = process.env.VERCEL
+  ? process.cwd()
+  : path.join(__dirname, '../..');
+
 function filePath(key) {
-  const p = path.join(__dirname, '../data', `${key}.json`);
-  if (process.env.VERCEL) {
-    const tmp = `/tmp/${key}.json`;
-    if (!fs.existsSync(tmp)) {
-      try { fs.copyFileSync(p, tmp); } catch { fs.writeFileSync(tmp, '[]'); }
-    }
-    return tmp;
+  const src = path.join(ROOT, 'server', 'data', `${key}.json`);
+  if (!process.env.VERCEL) return src;
+
+  const tmp = `/tmp/${key}.json`;
+  if (!fs.existsSync(tmp)) {
+    try { fs.copyFileSync(src, tmp); } catch { fs.writeFileSync(tmp, '[]'); }
   }
-  return p;
+  return tmp;
 }
 
 async function load(key) {
