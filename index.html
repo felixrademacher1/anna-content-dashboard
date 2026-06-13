@@ -1305,7 +1305,17 @@ const App = ()=>{
       <footer className="border-t border-border/30 mt-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex justify-between">
           <span className="font-serif italic text-xs" style={{color:CA(C.muted,.4)}}>anna.exe — Content Cockpit</span>
-          <span className="text-xs" style={{color:CA(C.muted,.3)}}>lokal gespeichert · kein Upload</span>
+          <button className="text-xs underline" style={{color:CA(C.muted,.5)}} onClick={()=>{
+            const data = {
+              posts: JSON.parse(localStorage.getItem('posts')||'[]'),
+              checkins: JSON.parse(localStorage.getItem('checkins')||'[]'),
+              ideas: JSON.parse(localStorage.getItem('ideas')||'[]'),
+            };
+            const a = document.createElement('a');
+            a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(data, null, 2));
+            a.download = 'anna-data.json';
+            a.click();
+          }}>Daten exportieren</button>
         </div>
       </footer>
       <QuickAdd posts={posts} setPosts={setPosts}/>
