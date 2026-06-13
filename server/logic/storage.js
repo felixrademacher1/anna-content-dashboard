@@ -1,29 +1,25 @@
 const fs = require('fs');
 const path = require('path');
 
-// On Vercel, process.cwd() is the project root (/var/task)
-// Locally, __dirname is server/logic/ so ../../ is project root
-const ROOT = process.env.VERCEL
-  ? process.cwd()
-  : path.join(__dirname, '../..');
-
-function filePath(key) {
-  const src = path.join(ROOT, 'server', 'data', `${key}.json`);
-  if (!process.env.VERCEL) return src;
-
-  const tmp = `/tmp/${key}.json`;
-  if (!fs.existsSync(tmp)) {
-    try { fs.copyFileSync(src, tmp); } catch { fs.writeFileSync(tmp, '[]'); }
-  }
-  return tmp;
-}
+// In-memory store seeded from the JSON files in the repo.
+// require() is resolved at bundle time so this always works on Vercel.
+const store = {
+  posts:    require('../data/posts.json'),
+  checkins: require('../data/checkins.json'),
+  ideas:    require('../data/ideas.json'),
+};
 
 async function load(key) {
-  try { return JSON.parse(fs.readFileSync(filePath(key), 'utf8')); } catch { return []; }
+  return store[key] || [];
 }
 
 async function save(key, data) {
-  fs.writeFileSync(filePath(key), JSON.stringify(data, null, 2));
+  store[key] = data;
+  // Also write to disk when running locally so data persists across restarts
+  if (!process.env.VERCEL) {
+    const file = path.join(__dirname, '../data', `${key}.json`);
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  }
 }
 
 module.exports = { load, save };
