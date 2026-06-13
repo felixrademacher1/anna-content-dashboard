@@ -1,4 +1,6 @@
 
+const API = 'http://localhost:3001';
+
 /* ===== charts.jsx ===== */
 /* ============================================================
    charts.jsx — Icons + SVG charts (Follower, Health, Sparkline, Ring)
@@ -807,6 +809,25 @@ function CheckinView({ checkins, onSubmit }) {
   const [formOpen, setFormOpen] = React.useState(false);
   const latest = checkins[0];
 
+  if (!latest) return (
+    <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-2)', maxWidth: 540 }}>
+          Wöchentlicher Puls: Follower-Stand plus wie sich die Drehtage angefühlt haben.
+        </p>
+        <button className="btn btn-primary" onClick={() => setFormOpen(true)}><Icon name="plus" className="icon-sm" />Neuer Check-in</button>
+      </div>
+      <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--ink-3)' }}>
+        <Icon name="pulse" style={{ width: 28, height: 28, margin: '0 auto 10px' }} />
+        <div style={{ fontWeight: 600, color: 'var(--ink-2)', marginBottom: 4 }}>Noch kein Check-in</div>
+        <div style={{ fontSize: 13 }}>Klick auf „Neuer Check-in" um zu starten.</div>
+      </div>
+      <CheckinForm open={formOpen} onClose={() => setFormOpen(false)}
+        latest={{ followers: 0, drehenEnergie: 0, erschoepfung: 0, totalMinuten: 0, activeDrehtage: 0 }}
+        onSubmit={onSubmit} />
+    </div>
+  );
+
   return (
     <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -1051,22 +1072,26 @@ function AddPostDrawer({ open, onClose, onSave }) {
     const reader = new FileReader();
     reader.onload = e => setShot(e.target.result);
     reader.readAsDataURL(file);
-    // simulate Groq vision parse
     setParsing(true); setParsed(false);
-    setTimeout(() => {
-      const v = 40000 + Math.floor(Math.random() * 160000);
-      setF(s => ({ ...s,
-        views: v,
-        likes: Math.round(v * (0.09 + Math.random() * 0.04)),
-        comments: Math.round(v * (0.005 + Math.random() * 0.004)),
-        saves: Math.round(v * (0.02 + Math.random() * 0.02)),
-        shares: Math.round(v * (0.012 + Math.random() * 0.015)),
-        hookRate: 60 + Math.floor(Math.random() * 25),
-        completionRate: 45 + Math.floor(Math.random() * 22),
-        newFollowers: Math.round(v * (0.008 + Math.random() * 0.018)),
-      }));
-      setParsing(false); setParsed(true);
-    }, 1700);
+    const fd = new FormData();
+    fd.append('image', file);
+    fetch(`${API}/api/screenshot`, { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(data => {
+        setF(s => ({
+          ...s,
+          views: data.views ?? s.views,
+          likes: data.likes ?? s.likes,
+          comments: data.comments ?? s.comments,
+          saves: data.saves ?? s.saves,
+          shares: data.shares ?? s.shares,
+          hookRate: data.hookRate ?? s.hookRate,
+          completionRate: data.completionRate ?? s.completionRate,
+          newFollowers: data.newFollowers ?? s.newFollowers,
+        }));
+        setParsing(false); setParsed(true);
+      })
+      .catch(() => { setParsing(false); setParsed(false); });
   };
   const onDrop = e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
 
@@ -1264,13 +1289,27 @@ function monNow() {
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [view, setView] = useState('overview');
-  const [posts, setPosts] = useState(() => window.POSTS);
-  const [checkins, setCheckins] = useState(() => window.CHECKINS);
-  const [ideas, setIdeas] = useState(() => window.IDEAS);
+  const [posts, setPosts] = useState([]);
+  const [checkins, setCheckins] = useState([]);
+  const [ideas, setIdeas] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(9999);
   const [addOpen, setAddOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [mobile, setMobile] = useState(window.innerWidth <= 860);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/posts`).then(r => r.json()),
+      fetch(`${API}/api/checkins`).then(r => r.json()),
+      fetch(`${API}/api/ideas`).then(r => r.json()),
+    ]).then(([p, c, i]) => {
+      setPosts(p);
+      setCheckins(c);
+      setIdeas(i);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     const h = () => setMobile(window.innerWidth <= 860);
@@ -1289,31 +1328,48 @@ function App() {
   }, [t.accent]);
 
   /* ---- actions ---- */
-  const addPost = (data) => {
-    const p = enrichPost({ ...data, id: 'p' + Date.now(), createdAt: new Date().toISOString(), screenshot: null });
+  const addPost = async (data) => {
+    const res = await fetch(`${API}/api/posts`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    const p = await res.json();
     setPosts(ps => [p, ...ps]);
   };
-  const submitCheckin = ({ followers, drehtage }) => {
-    const h = computeHealth(drehtage);
-    const start = monNow();
-    const end = new Date(start); end.setDate(end.getDate() + 6);
-    const ws = start.toISOString().slice(0, 10);
-    const prev = checkins.find(c => c.weekStart !== ws) || checkins[0];
-    const delta = prev ? followers - prev.followers : 0;
-    const next = {
-      id: 'c' + Date.now(), weekStart: ws, weekEnd: end.toISOString().slice(0, 10),
-      followers, followerDelta: delta, ...h, drehtage, createdAt: new Date().toISOString(),
-    };
+  const submitCheckin = async ({ followers, drehtage }) => {
+    const res = await fetch(`${API}/api/checkins`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ followers, drehtage }),
+    });
+    const c = await res.json();
     setCheckins(cs => {
-      const without = cs.filter(c => c.weekStart !== ws);
-      return [next, ...without].sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
+      const without = cs.filter(x => x.weekStart !== c.weekStart);
+      return [c, ...without].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
     });
   };
-  const addIdea = (data) => setIdeas(is => [{ id: 'i' + Date.now(), createdAt: new Date().toISOString(), ...data }, ...is]);
-  const moveIdea = (id, status) => setIdeas(is => is.map(i => i.id === id ? { ...i, status } : i));
-  const delIdea = (id) => setIdeas(is => is.filter(i => i.id !== id));
+  const addIdea = async (data) => {
+    const res = await fetch(`${API}/api/ideas`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    const idea = await res.json();
+    setIdeas(is => [idea, ...is]);
+  };
+  const moveIdea = async (id, status) => {
+    await fetch(`${API}/api/ideas/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+    });
+    setIdeas(is => is.map(i => i.id === id ? { ...i, status } : i));
+  };
+  const delIdea = async (id) => {
+    await fetch(`${API}/api/ideas/${id}`, { method: 'DELETE' });
+    setIdeas(is => is.filter(i => i.id !== id));
+  };
 
   const meta = META[view];
+
+  if (loading) return (
+    <div style={{ display: 'grid', placeItems: 'center', height: '100vh', fontSize: 14, color: 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>
+      Verbinde mit Backend…
+    </div>
+  );
 
   return (
     <div className="shell">
@@ -1327,7 +1383,7 @@ function App() {
               </button>
             ))}
           </nav>
-          <ProfileCard followers={checkins[0].followers} delta={checkins[0].followerDelta} />
+          {checkins[0] && <ProfileCard followers={checkins[0].followers} delta={checkins[0].followerDelta} />}
         </aside>
       )}
 
@@ -1346,9 +1402,16 @@ function App() {
         </header>
 
         <main className="content">
-          {view === 'overview' && <OverviewView posts={posts} checkins={checkins} days={days} setDays={setDays}
+          {view === 'overview' && checkins.length > 0 && <OverviewView posts={posts} checkins={checkins} days={days} setDays={setDays}
             statCardStyle={t.statCardStyle} followerVariant={t.followerVariant} healthVariant={t.healthVariant}
             onOpenPost={setDetail} />}
+          {view === 'overview' && checkins.length === 0 && (
+            <div style={{ display: 'grid', placeItems: 'center', height: 300, color: 'var(--ink-3)', fontSize: 14, textAlign: 'center' }}>
+              <div><Icon name="pulse" style={{ width: 28, height: 28, margin: '0 auto 10px', color: 'var(--ink-3)' }} />
+              <div style={{ fontWeight: 600, color: 'var(--ink-2)', marginBottom: 4 }}>Noch kein Check-in</div>
+              <div>Geh auf „Check-in" und leg los — danach erscheinen hier alle Graphen.</div></div>
+            </div>
+          )}
           {view === 'posts' && <PostsView posts={posts} onOpenPost={setDetail} onAdd={() => setAddOpen(true)} />}
           {view === 'checkin' && <CheckinView checkins={checkins} onSubmit={submitCheckin} />}
           {view === 'ideas' && <IdeasView ideas={ideas} onAdd={addIdea} onMove={moveIdea} onDelete={delIdea} />}
