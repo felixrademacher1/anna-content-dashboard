@@ -7,9 +7,13 @@ const CHECKINS = [{"id": "dz4imhel0u51781360603179", "weekStart": "2026-06-08", 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const existing = await kv.get('posts');
-  if (existing && existing.length > 0) {
-    return res.json({ ok: false, message: 'Already seeded', posts: existing.length });
+  const force = req.query.force === 'true';
+
+  if (!force) {
+    const existing = await kv.get('posts');
+    if (existing && existing.length > 0) {
+      return res.json({ ok: false, message: 'Already seeded', posts: existing.length });
+    }
   }
 
   await kv.set('posts', POSTS);
