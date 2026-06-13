@@ -1,1 +1,40 @@
-[]
+[
+  {
+    "id": "vyvsuqcy4d1781357734818",
+    "weekStart": "2026-06-08",
+    "weekEnd": "2026-06-14",
+    "followers": 5210,
+    "followerDelta": 0,
+    "drehtage": [
+      {
+        "label": "Drehtag 1",
+        "datum": "2026-06-09",
+        "energie": 9,
+        "erschoepfung": 2,
+        "zeitaufwandMin": 70,
+        "vibeNote": "top form"
+      },
+      {
+        "label": "Drehtag 2",
+        "datum": "2026-06-10",
+        "energie": 8,
+        "erschoepfung": 3,
+        "zeitaufwandMin": 80,
+        "vibeNote": ""
+      },
+      {
+        "label": "Drehtag 3",
+        "datum": "",
+        "energie": 0,
+        "erschoepfung": 0,
+        "zeitaufwandMin": 0,
+        "vibeNote": ""
+      }
+    ],
+    "drehenEnergie": 9,
+    "erschoepfung": 3,
+    "totalMinuten": 150,
+    "activeDrehtage": 2,
+    "createdAt": "2026-06-13T13:35:34.818Z"
+  }
+]
