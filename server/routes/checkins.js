@@ -4,60 +4,46 @@ const { load, save } = require('../logic/storage');
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
-function getMon(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00');
+function getMon(today) {
+  const d = new Date(today);
   const day = d.getDay();
-  d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
-  return d.toISOString().split('T')[0];
-}
-
-function getSun(monStr) {
-  const d = new Date(monStr + 'T12:00:00');
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().split('T')[0];
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
 }
 
 // GET /api/checkins
 router.get('/', async (req, res) => {
   const checkins = await load('checkins');
-  res.json([...checkins].sort((a, b) => b.weekStart.localeCompare(a.weekStart)));
+  res.json(checkins.sort((a, b) => b.weekStart.localeCompare(a.weekStart)));
 });
 
-// POST /api/checkins — upserts current week
+// POST /api/checkins
 router.post('/', async (req, res) => {
-  const { followers, drehtage = [] } = req.body;
-  if (!followers) return res.status(400).json({ error: 'followers required' });
-
   const checkins = await load('checkins');
-  const weekStart = getMon(new Date().toISOString().split('T')[0]);
-  const weekEnd = getSun(weekStart);
+  const { followers, drehtage = [] } = req.body;
 
-  const prev = [...checkins]
-    .filter(c => c.weekStart !== weekStart)
-    .sort((a, b) => b.weekStart.localeCompare(a.weekStart))[0];
+  const weekStart = getMon(new Date());
+  const weekEndDate = new Date(weekStart);
+  weekEndDate.setDate(weekEndDate.getDate() + 6);
+  const weekEnd = weekEndDate.toISOString().slice(0, 10);
 
-  const followerDelta = prev ? Number(followers) - (prev.followers || 0) : 0;
+  const others = checkins.filter(c => c.weekStart !== weekStart).sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  const prev = others[0] || null;
+  const followerDelta = prev ? (Number(followers) || 0) - (prev.followers || 0) : 0;
   const health = computeHealthScores(drehtage);
 
+  const existingIdx = checkins.findIndex(c => c.weekStart === weekStart);
   const entry = {
-    id: uid(),
-    weekStart,
-    weekEnd,
-    followers: Number(followers),
-    followerDelta,
-    drehtage: drehtage.map(d => ({ ...d, zeitaufwandMin: Number(d.zeitaufwandMin) || 0 })),
-    ...health,
-    createdAt: new Date().toISOString(),
+    id: existingIdx >= 0 ? checkins[existingIdx].id : uid(),
+    weekStart, weekEnd,
+    followers: Number(followers) || 0,
+    followerDelta, drehtage, ...health,
+    createdAt: existingIdx >= 0 ? checkins[existingIdx].createdAt : new Date().toISOString(),
   };
 
-  const existingIdx = checkins.findIndex(c => c.weekStart === weekStart);
-  if (existingIdx >= 0) {
-    entry.id = checkins[existingIdx].id;
-    checkins[existingIdx] = entry;
-  } else {
-    checkins.unshift(entry);
-  }
-
+  if (existingIdx >= 0) { checkins[existingIdx] = entry; } else { checkins.unshift(entry); }
   await save('checkins', checkins);
   res.status(201).json(entry);
 });

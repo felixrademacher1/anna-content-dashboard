@@ -1,68 +1,65 @@
-const router = require('express').Router();
+const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { enrichPost } = require('../logic/kpis');
 const { avgKpi, formatMatrix, topPosts, filterByDays } = require('../logic/aggregations');
 
-const POSTS_FILE    = path.join(__dirname, '../data/posts.json');
+const router = express.Router();
+const POSTS_FILE = path.join(__dirname, '../data/posts.json');
 const CHECKINS_FILE = path.join(__dirname, '../data/checkins.json');
-
-const loadPosts    = () => { try { return JSON.parse(fs.readFileSync(POSTS_FILE, 'utf8')); } catch { return []; } };
-const loadCheckins = () => { try { return JSON.parse(fs.readFileSync(CHECKINS_FILE, 'utf8')); } catch { return []; } };
 
 // GET /api/overview?days=28&topKpi=amplification
 router.get('/', (req, res) => {
   const { days, topKpi = 'amplification' } = req.query;
 
-  let posts = loadPosts();
-  if (days) posts = filterByDays(posts, Number(days));
+  let posts = JSON.parse(fs.readFileSync(POSTS_FILE, 'utf8'));
+  if (days) posts = filterByDays(posts, days, 'date');
   const enriched = posts.map(enrichPost);
 
-  const checkins = [...loadCheckins()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+  const checkins = JSON.parse(fs.readFileSync(CHECKINS_FILE, 'utf8'))
+    .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
 
-  // Stat cards data
-  const latestCheckin = checkins.length ? checkins[checkins.length - 1] : null;
+  const latest = checkins[checkins.length - 1] || null;
+  const first = checkins[0] || null;
+
   const statCards = {
-    totalPosts:        enriched.length,
-    avgAmplification:  avgKpi(enriched, 'amplification'),
-    avgHookRate:       avgKpi(enriched, 'hookRate'),
-    avgCompletion:     avgKpi(enriched, 'completion'),
-    avgFollowerCVR:    avgKpi(enriched, 'followerCVR'),
-    avgSaveRate:       avgKpi(enriched, 'saveRate'),
-    latestFollowers:   latestCheckin ? latestCheckin.followers : null,
-    latestFollowerDelta: latestCheckin ? latestCheckin.followerDelta : null,
-    followerGrowth:    checkins.length >= 2
-      ? checkins[checkins.length - 1].followers - checkins[0].followers
+    totalPosts: enriched.length,
+    avgAmplification: avgKpi(enriched, 'amplification'),
+    avgEngagementRate: avgKpi(enriched, 'engagementRate'),
+    avgCompletion: avgKpi(enriched, 'completion'),
+    avgFollowerCVR: avgKpi(enriched, 'followerCVR'),
+    avgSaveRate: avgKpi(enriched, 'saveRate'),
+    latestFollowers: latest ? latest.followers : null,
+    latestFollowerDelta: latest ? latest.followerDelta : null,
+    followerGrowth: (latest && first && latest !== first)
+      ? latest.followers - first.followers
       : null,
   };
 
-  // Follower chart data (all time, one point per week)
-  const followerChartData = checkins.map(c => ({
-    name: c.weekStart.slice(5).replace('-', '/'), // MM/DD
-    val: c.followers,
-    weekStart: c.weekStart,
-  }));
+  const followerChartData = checkins.map(c => {
+    const d = new Date(c.weekStart);
+    const name = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+    return { name, val: c.followers, weekStart: c.weekStart };
+  });
 
-  // Health chart data (exhaustion over time)
   const healthChartData = checkins
     .filter(c => c.erschoepfung > 0)
-    .map(c => ({
-      name: c.weekStart.slice(5).replace('-', '/'),
-      erschoepfung: c.erschoepfung,
-      energie: c.drehenEnergie || 0,
-      weekStart: c.weekStart,
-    }));
+    .map(c => {
+      const d = new Date(c.weekStart);
+      const name = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      return { name, erschoepfung: c.erschoepfung, energie: c.drehenEnergie, weekStart: c.weekStart };
+    });
 
-  // Format performance matrix
-  const matrix = formatMatrix(enriched);
+  const themes = [...new Set(posts.map(p => p.theme).filter(t => t && t.trim()))];
 
-  // Top 5 posts
-  const top5 = topPosts(enriched, topKpi, 5);
-
-  // All unique themes for filter dropdown
-  const themes = [...new Set(posts.map(p => p.theme).filter(Boolean))];
-
-  res.json({ statCards, followerChartData, healthChartData, formatMatrix: matrix, top5, themes });
+  res.json({
+    statCards,
+    followerChartData,
+    healthChartData,
+    formatMatrix: formatMatrix(enriched),
+    top5: topPosts(enriched, topKpi, 5),
+    themes,
+  });
 });
 
 module.exports = router;

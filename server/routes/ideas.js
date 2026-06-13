@@ -3,19 +3,22 @@ const { load, save } = require('../logic/storage');
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now();
 
-// GET /api/ideas
 router.get('/', async (req, res) => res.json(await load('ideas')));
 
-// POST /api/ideas
+router.get('/:id', async (req, res) => {
+  const idea = (await load('ideas')).find(i => i.id === req.params.id);
+  if (!idea) return res.status(404).json({ error: 'Not found' });
+  res.json(idea);
+});
+
 router.post('/', async (req, res) => {
   const ideas = await load('ideas');
-  const idea = { id: uid(), createdAt: new Date().toISOString(), status: 'Idee', ...req.body };
+  const idea = { status: 'Idee', ...req.body, id: uid(), createdAt: new Date().toISOString() };
   ideas.unshift(idea);
   await save('ideas', ideas);
   res.status(201).json(idea);
 });
 
-// PUT /api/ideas/:id
 router.put('/:id', async (req, res) => {
   const ideas = await load('ideas');
   const idx = ideas.findIndex(i => i.id === req.params.id);
@@ -25,7 +28,6 @@ router.put('/:id', async (req, res) => {
   res.json(ideas[idx]);
 });
 
-// DELETE /api/ideas/:id
 router.delete('/:id', async (req, res) => {
   const ideas = await load('ideas');
   const idx = ideas.findIndex(i => i.id === req.params.id);

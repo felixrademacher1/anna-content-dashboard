@@ -1,33 +1,64 @@
-// All 5 KPIs. Each takes a post object and returns a number or null.
 const KPIS = {
   amplification: {
-    label: 'Amplification', unit: '%', color: 'cyan', good: 2, ok: 0.5,
-    calc: (p) => p.views > 0 ? ((p.shares + p.saves) / p.views * 100) : null,
+    label: 'Amplification Rate',
+    unit: '%',
+    good: 2,
+    ok: 0.5,
+    calc: (post) => {
+      if (!post.views) return null;
+      const val = ((post.shares || 0) + (post.saves || 0)) / post.views * 100;
+      return parseFloat(val.toFixed(1));
+    },
   },
-  hookRate: {
-    label: 'Hook Rate', unit: '%', color: 'coral', good: 70, ok: 50,
-    calc: (p) => p.hookRate > 0 ? p.hookRate : null,
+  engagementRate: {
+    label: 'Engagement Rate',
+    unit: '%',
+    good: 3,
+    ok: 1,
+    calc: (post) => {
+      if (!post.views) return null;
+      const val = ((post.likes || 0) + (post.comments || 0) + (post.saves || 0) + (post.shares || 0)) / post.views * 100;
+      return parseFloat(val.toFixed(2));
+    },
   },
   completion: {
-    label: 'Completion', unit: '%', color: 'sage', good: 50, ok: 30,
-    calc: (p) => p.completionRate > 0 ? p.completionRate : null,
+    label: 'Completion Rate',
+    unit: '%',
+    good: 50,
+    ok: 30,
+    calc: (post) => {
+      if (!post.completionRate) return null;
+      return parseFloat(Number(post.completionRate).toFixed(1));
+    },
   },
   followerCVR: {
-    label: 'Follower CVR', unit: '%', color: 'yellow', good: 1, ok: 0.3,
-    calc: (p) => p.views > 0 && p.newFollowers > 0 ? (p.newFollowers / p.views * 100) : null,
+    label: 'Follower CVR',
+    unit: '%',
+    good: 1,
+    ok: 0.3,
+    calc: (post) => {
+      if (!post.views) return null;
+      const val = (post.newFollowers || 0) / post.views * 100;
+      return parseFloat(val.toFixed(3));
+    },
   },
   saveRate: {
-    label: 'Save Rate', unit: '/1k', color: 'violet', good: 5, ok: 2,
-    calc: (p) => p.views > 0 ? (p.saves / p.views * 1000) : null,
+    label: 'Save Rate',
+    unit: '/1k',
+    good: 5,
+    ok: 2,
+    calc: (post) => {
+      if (!post.views) return null;
+      const val = (post.saves || 0) / post.views * 1000;
+      return parseFloat(val.toFixed(1));
+    },
   },
 };
 
-// Enrich a post with computed KPIs
 function enrichPost(post) {
   const kpis = {};
   for (const [key, def] of Object.entries(KPIS)) {
-    const v = def.calc(post);
-    kpis[key] = v !== null ? parseFloat(v.toFixed(key === 'followerCVR' ? 2 : 1)) : null;
+    kpis[key] = def.calc(post);
   }
   return { ...post, kpis };
 }
