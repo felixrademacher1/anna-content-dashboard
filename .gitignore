@@ -2,3 +2,5 @@
 .DS_Store
 server/.env
 server/node_modules/
+node_modules/
+.vercel/
