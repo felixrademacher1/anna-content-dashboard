@@ -11,11 +11,11 @@ const KPIS = {
     desc: '(Shares + Saves) / Views',
     calc: p => (p.views > 0 ? ((p.shares + p.saves) / p.views) * 100 : null),
   },
-  hookRate: {
-    key: 'hookRate', label: 'Hook Rate', short: 'Hook', unit: '%',
-    good: 70, ok: 50, color: 'hook',
-    desc: '3-Sekunden-Retention',
-    calc: p => (p.hookRate > 0 ? p.hookRate : null),
+  engagementRate: {
+    key: 'engagementRate', label: 'Engagement Rate', short: 'ER', unit: '%',
+    good: 3, ok: 1, color: 'hook',
+    desc: '(Likes + Kommentare + Saves + Shares) / Views',
+    calc: p => (p.views > 0 ? ((p.likes + p.comments + (p.saves || 0) + (p.shares || 0)) / p.views) * 100 : null),
   },
   completion: {
     key: 'completion', label: 'Completion', short: 'Compl', unit: '%',
@@ -36,7 +36,7 @@ const KPIS = {
     calc: p => (p.views > 0 ? (p.saves / p.views) * 1000 : null),
   },
 };
-const KPI_ORDER = ['amplification', 'hookRate', 'completion', 'followerCVR', 'saveRate'];
+const KPI_ORDER = ['amplification', 'engagementRate', 'completion', 'followerCVR', 'saveRate'];
 
 function enrichPost(p) {
   const kpis = {};
@@ -55,6 +55,7 @@ function kpiRating(key, val) {
 
 function fmtKpi(key, val) {
   if (val == null) return '—';
+  if (key === 'followerCVR') return val.toFixed(3);
   const dec = val >= 100 ? 0 : (val >= 10 ? 1 : 1);
   return val.toFixed(dec);
 }

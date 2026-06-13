@@ -10,14 +10,15 @@ const KPIS = {
       return parseFloat(val.toFixed(1));
     },
   },
-  hookRate: {
-    label: 'Hook Rate',
+  engagementRate: {
+    label: 'Engagement Rate',
     unit: '%',
-    good: 70,
-    ok: 50,
+    good: 3,
+    ok: 1,
     calc: (post) => {
-      if (post.hookRate == null) return null;
-      return parseFloat(Number(post.hookRate).toFixed(1));
+      if (!post.views) return null;
+      const val = ((post.likes || 0) + (post.comments || 0) + (post.saves || 0) + (post.shares || 0)) / post.views * 100;
+      return parseFloat(val.toFixed(2));
     },
   },
   completion: {
@@ -26,7 +27,7 @@ const KPIS = {
     good: 50,
     ok: 30,
     calc: (post) => {
-      if (post.completionRate == null) return null;
+      if (!post.completionRate) return null;
       return parseFloat(Number(post.completionRate).toFixed(1));
     },
   },
@@ -38,7 +39,7 @@ const KPIS = {
     calc: (post) => {
       if (!post.views) return null;
       const val = (post.newFollowers || 0) / post.views * 100;
-      return parseFloat(val.toFixed(2));
+      return parseFloat(val.toFixed(3));
     },
   },
   saveRate: {

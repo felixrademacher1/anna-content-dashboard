@@ -25,7 +25,7 @@ router.get('/', (req, res) => {
   const statCards = {
     totalPosts: enriched.length,
     avgAmplification: avgKpi(enriched, 'amplification'),
-    avgHookRate: avgKpi(enriched, 'hookRate'),
+    avgEngagementRate: avgKpi(enriched, 'engagementRate'),
     avgCompletion: avgKpi(enriched, 'completion'),
     avgFollowerCVR: avgKpi(enriched, 'followerCVR'),
     avgSaveRate: avgKpi(enriched, 'saveRate'),

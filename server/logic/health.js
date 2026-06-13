@@ -10,11 +10,11 @@ function computeHealthScores(drehtage) {
   const erschoepfungEntries = drehtage.filter(d => d.erschoepfung > 0);
 
   const drehenEnergie = energieEntries.length
-    ? Math.round(energieEntries.reduce((s, d) => s + d.energie, 0) / energieEntries.length)
+    ? energieEntries.reduce((s, d) => s + d.energie, 0) / energieEntries.length
     : 0;
 
   const erschoepfung = erschoepfungEntries.length
-    ? Math.round(erschoepfungEntries.reduce((s, d) => s + d.erschoepfung, 0) / erschoepfungEntries.length)
+    ? erschoepfungEntries.reduce((s, d) => s + d.erschoepfung, 0) / erschoepfungEntries.length
     : 0;
 
   const totalMinuten = active.reduce((s, d) => s + (d.zeitaufwandMin || 0), 0);

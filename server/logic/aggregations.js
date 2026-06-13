@@ -18,7 +18,7 @@ function formatMatrix(enrichedPosts) {
     count: posts.length,
     kpis: {
       amplification: avgKpi(posts, 'amplification'),
-      hookRate: avgKpi(posts, 'hookRate'),
+      engagementRate: avgKpi(posts, 'engagementRate'),
       completion: avgKpi(posts, 'completion'),
       followerCVR: avgKpi(posts, 'followerCVR'),
       saveRate: avgKpi(posts, 'saveRate'),
